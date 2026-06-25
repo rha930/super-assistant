@@ -6,9 +6,32 @@ import { api } from '../services/api'
 import { extractGraphArtifacts } from '../services/graphValidator'
 import { useUIStore } from './uiStore'
 
+interface ConversationSummary {
+  conversation_id: string
+  first_message_at?: string
+  last_message_at?: string
+  message_count: number
+  preview: string
+}
+
+const USER_ID_STORAGE_KEY = 'chat.user_id'
+
+const ensureUserId = (): string => {
+  const existing = localStorage.getItem(USER_ID_STORAGE_KEY)
+  if (existing && existing.trim()) {
+    return existing
+  }
+  const generated = `user_${crypto.randomUUID()}`
+  localStorage.setItem(USER_ID_STORAGE_KEY, generated)
+  return generated
+}
+
 export const useChatStore = defineStore('chat', () => {
   const messages = ref<Message[]>([])
   const currentConversationId = ref<string>('')
+  const userId = ref<string>(ensureUserId())
+  const conversations = ref<ConversationSummary[]>([])
+  const isLoadingConversations = ref<boolean>(false)
   const graphsByConversationId = ref<Map<string, GraphPayload[]>>(new Map())
   const selectedGraphIdByConversationId = ref<Map<string, string>>(new Map())
   const uiStore = useUIStore()
@@ -94,11 +117,13 @@ export const useChatStore = defineStore('chat', () => {
       const response = await fetch(`${apiUrl}/api/chat/stream`, {
         method: 'POST',
         headers: {
-          'Content-Type': 'application/json'
+          'Content-Type': 'application/json',
+          'X-User-Id': userId.value
         },
         body: JSON.stringify({
           message: content,
-          conversation_id: currentConversationId.value
+          conversation_id: currentConversationId.value,
+          user_id: userId.value
         })
       })
 
@@ -167,6 +192,8 @@ export const useChatStore = defineStore('chat', () => {
       if (!finalMsg || !finalMsg.content.trim()) {
         updateMessage(agentMessageId, { content: '[No response received]' })
       }
+
+      await loadConversations()
     } catch (error) {
       console.error('Failed to send message:', error)
       updateMessage(agentMessageId, { content: '[Error: failed to stream response]' })
@@ -184,17 +211,48 @@ export const useChatStore = defineStore('chat', () => {
 
   const loadHistory = async (conversationId: string) => {
     try {
-      const response = await api.get(`/api/chat/history/${conversationId}`)
-      messages.value = response.data?.data?.messages || []
+      const response = await api.get(`/api/chat/history/${conversationId}`, {
+        headers: {
+          'X-User-Id': userId.value
+        }
+      })
+      const history = response.data?.data?.messages || []
+      messages.value = history.map((m: any) => ({
+        id: m.id || `msg_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
+        role: m.role,
+        content: m.content,
+        timestamp: m.timestamp ? new Date(m.timestamp) : new Date(),
+        metadata: m.metadata || {}
+      }))
       currentConversationId.value = conversationId
     } catch (error) {
       console.error('Failed to load history:', error)
     }
   }
 
+  const loadConversations = async (limit = 50) => {
+    isLoadingConversations.value = true
+    try {
+      const response = await api.get('/api/chat/conversations', {
+        params: { limit },
+        headers: {
+          'X-User-Id': userId.value
+        }
+      })
+      conversations.value = response.data?.data?.conversations || []
+    } catch (error) {
+      console.error('Failed to load conversations:', error)
+    } finally {
+      isLoadingConversations.value = false
+    }
+  }
+
   return {
     messages,
     currentConversationId,
+    userId,
+    conversations,
+    isLoadingConversations,
     currentGraphs,
     selectedGraphId,
     selectedGraph,
@@ -203,6 +261,7 @@ export const useChatStore = defineStore('chat', () => {
     sendMessage,
     clearMessages,
     loadHistory,
+    loadConversations,
     addGraphs,
     selectGraph
   }

@@ -13,6 +13,21 @@
 
     <!-- Configuration Form -->
     <div class="flex-1 overflow-y-auto p-6 space-y-6">
+      <!-- Theme -->
+      <div>
+        <h3 class="text-sm font-semibold app-text mb-2">Theme</h3>
+        <select
+          :value="selectedTheme"
+          @change="onThemeChange"
+          class="w-full px-3 py-2 border app-border rounded-lg text-sm app-surface app-text"
+          aria-label="Select theme"
+        >
+          <option value="light">Light</option>
+          <option value="dark">Dark</option>
+          <option value="system">System</option>
+        </select>
+      </div>
+
       <!-- Active Model -->
       <div>
         <h3 class="text-sm font-semibold app-text mb-2">Active Model</h3>
@@ -141,13 +156,24 @@
 <script setup lang="ts">
 import { ref, reactive, onMounted, computed } from 'vue'
 import { useConfigStore } from '../stores/configStore'
+import { useUIStore } from '../stores/uiStore'
 
 defineEmits<{
   close: []
 }>()
 
 const configStore = useConfigStore()
+const uiStore = useUIStore()
 const isSaving = ref(false)
+
+const selectedTheme = computed(() => uiStore.selectedTheme)
+
+const onThemeChange = (event: Event) => {
+  const target = event.target as HTMLSelectElement
+  if (target.value === 'light' || target.value === 'dark' || target.value === 'system') {
+    uiStore.setTheme(target.value)
+  }
+}
 
 const config = reactive({
   model: '',

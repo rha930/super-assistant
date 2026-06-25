@@ -24,6 +24,11 @@ DEFAULT_MAX_ITERATIONS = int(os.getenv('DEFAULT_MAX_ITERATIONS', '10'))
 DEFAULT_TIMEOUT = int(os.getenv('DEFAULT_TIMEOUT', '30'))
 CONTEXT_MAX_MESSAGES = int(os.getenv('CONTEXT_MAX_MESSAGES', '12'))
 CONTEXT_MAX_INPUT_CHARS = int(os.getenv('CONTEXT_MAX_INPUT_CHARS', '12000'))
+HISTORY_BACKEND_TYPE = os.getenv('HISTORY_BACKEND_TYPE', 'local')
+HISTORY_DB_PATH = os.getenv('HISTORY_DB_PATH', './backend/data/chat_history.db')
+HISTORY_MAX_MESSAGES_PER_CONVERSATION = int(os.getenv('HISTORY_MAX_MESSAGES_PER_CONVERSATION', '200'))
+HISTORY_REDIS_URL = os.getenv('HISTORY_REDIS_URL', 'redis://localhost:6379/0')
+HISTORY_REDIS_PREFIX = os.getenv('HISTORY_REDIS_PREFIX', 'chat')
 
 # Default Config
 DEFAULT_CONFIG = {
@@ -41,5 +46,12 @@ DEFAULT_CONFIG = {
     'context_config': {
         'max_messages': CONTEXT_MAX_MESSAGES,
         'max_input_chars': CONTEXT_MAX_INPUT_CHARS
+    },
+    'history_config': {
+        'backend_type': HISTORY_BACKEND_TYPE,
+        'db_path': HISTORY_DB_PATH,
+        'max_messages_per_conversation': HISTORY_MAX_MESSAGES_PER_CONVERSATION,
+        'redis_url': HISTORY_REDIS_URL,
+        'redis_prefix': HISTORY_REDIS_PREFIX
     }
 }

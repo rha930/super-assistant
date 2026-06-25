@@ -53,6 +53,12 @@ class ConfigService:
                 if 'context_config' not in self.config:
                     self.config['context_config'] = {}
                 self.config['context_config'].update(new_config['context_config'])
+
+            # Update history config
+            if 'history_config' in new_config:
+                if 'history_config' not in self.config:
+                    self.config['history_config'] = {}
+                self.config['history_config'].update(new_config['history_config'])
             
             logger.info("Configuration updated successfully")
             return self.get_config()

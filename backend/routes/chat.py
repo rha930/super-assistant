@@ -1,13 +1,24 @@
-from flask import Blueprint, request, jsonify, Response, stream_with_context
+from flask import Blueprint, request, Response, stream_with_context
 from services.chat_service import ChatService
 import json
-import requests
 from models.response import SuccessResponse, ErrorResponse
 import logging
 
 logger = logging.getLogger(__name__)
 chat_bp = Blueprint('chat', __name__, url_prefix='/api/chat')
 chat_service = ChatService()
+
+
+def _resolve_user_id(data=None):
+    """Resolve user identity from header first, then body, with safe fallback."""
+    header_user = request.headers.get('X-User-Id', '').strip()
+    if header_user:
+        return header_user
+    if data and isinstance(data, dict):
+        body_user = str(data.get('user_id', '')).strip()
+        if body_user:
+            return body_user
+    return 'anonymous'
 
 @chat_bp.route('/message', methods=['POST'])
 def send_message():
@@ -28,9 +39,10 @@ def send_message():
         
         message = data['message']
         conversation_id = data.get('conversation_id')
+        user_id = _resolve_user_id(data)
         
         try:
-            response = chat_service.process_message(message, conversation_id)
+            response = chat_service.process_message(message, conversation_id, user_id=user_id)
             return SuccessResponse(data=response).to_dict(), 200
         except RuntimeError as e:
             # Connection errors from Ollama
@@ -58,6 +70,7 @@ def stream_message():
 
         message = data['message']
         conversation_id = data.get('conversation_id')
+        user_id = _resolve_user_id(data)
 
         @stream_with_context
         def event_stream():
@@ -76,7 +89,7 @@ def stream_message():
             yield f"data: {json.dumps(init_payload)}\n\n"
 
             try:
-                for event in chat_service.stream_message(message, conversation_id):
+                for event in chat_service.stream_message(message, conversation_id, user_id=user_id):
                     cid = event.get('conversation_id', cid)
                     chunk = event.get('chunk', '')
                     done = event.get('done', False)
@@ -112,7 +125,8 @@ def stream_message():
                     artifacts = chat_service.finalize_stream_message(
                         conversation_id=cid,
                         content=full_response,
-                        metadata=final_metadata
+                        metadata=final_metadata,
+                        user_id=user_id
                     )
 
                     # Emit a deterministic final done event carrying artifacts for the Graph Panel.
@@ -155,17 +169,37 @@ def stream_message():
 def get_history(conversation_id):
     """Get conversation history."""
     try:
-        history = chat_service.get_history(conversation_id)
+        user_id = _resolve_user_id(None)
+        history = chat_service.get_history(conversation_id, user_id=user_id)
         return SuccessResponse(data={'messages': history}).to_dict(), 200
     except Exception as e:
         logger.error(f"Error in get_history: {e}")
+        return ErrorResponse(message=str(e)).to_dict(), 500
+
+
+@chat_bp.route('/conversations', methods=['GET'])
+def list_conversations():
+    """List user conversations ordered by latest activity."""
+    try:
+        user_id = _resolve_user_id(None)
+        limit_raw = request.args.get('limit', '50')
+        try:
+            limit = max(1, min(200, int(limit_raw)))
+        except ValueError:
+            limit = 50
+
+        conversations = chat_service.list_conversations(user_id=user_id, limit=limit)
+        return SuccessResponse(data={'conversations': conversations}).to_dict(), 200
+    except Exception as e:
+        logger.error(f"Error in list_conversations: {e}")
         return ErrorResponse(message=str(e)).to_dict(), 500
 
 @chat_bp.route('/reset', methods=['DELETE'])
 def reset_conversation():
     """Reset/clear the current conversation."""
     try:
-        chat_service.reset()
+        user_id = _resolve_user_id(None)
+        chat_service.reset(user_id=user_id)
         return SuccessResponse(message='Conversation reset').to_dict(), 200
     except Exception as e:
         logger.error(f"Error in reset_conversation: {e}")

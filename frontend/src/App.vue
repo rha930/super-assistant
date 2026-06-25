@@ -5,19 +5,6 @@
       <div class="w-full flex items-center justify-between">
         <h1 class="text-2xl font-bold text-left">Super Agent</h1>
         <div class="flex items-center gap-3">
-          <label for="theme-select" class="text-sm font-medium app-text-muted">Theme</label>
-          <select
-            id="theme-select"
-            :value="selectedTheme"
-            @change="onThemeChange"
-            class="theme-select px-3 py-2 rounded-lg border text-sm app-surface app-border app-text"
-            aria-label="Select theme"
-          >
-            <option value="light">Light</option>
-            <option value="dark">Dark</option>
-            <option value="system">System</option>
-          </select>
-
           <button
             @click="toggleGraphPanel"
             class="p-2 app-text-muted rounded-lg transition-opacity hover:opacity-80"
@@ -29,6 +16,19 @@
               <path d="M7 10h2v7H7z"></path>
               <path d="M12 7h2v10h-2z"></path>
               <path d="M17 5h2v12h-2z"></path>
+            </svg>
+          </button>
+
+          <button
+            @click="toggleHistoryPanel"
+            class="p-2 app-text-muted rounded-lg transition-opacity hover:opacity-80"
+            aria-label="Toggle history panel"
+            title="Chat history"
+          >
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" class="w-6 h-6">
+              <path d="M13 3a9 9 0 1 0 8.95 10h-2.02A7 7 0 1 1 13 5v3l4-4-4-4v3z"></path>
+              <path d="M12 8h2v5h-2z"></path>
+              <path d="M12 14h5v2h-5z"></path>
             </svg>
           </button>
 
@@ -76,25 +76,31 @@
       >
         <ConfigPanel @close="toggleConfigPanel" />
       </aside>
+
+      <!-- History Panel -->
+      <aside
+        v-if="showHistoryPanel"
+        class="w-96 flex flex-col min-w-0"
+      >
+        <HistoryPanel />
+      </aside>
     </main>
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref, computed, watch } from 'vue'
+import { ref, watch } from 'vue'
 import ChatWindow from './components/ChatWindow.vue'
 import ConfigPanel from './components/ConfigPanel.vue'
 import GraphPanel from './components/GraphPanel.vue'
-import { useUIStore } from './stores/uiStore'
+import HistoryPanel from './components/HistoryPanel.vue'
 import { useChatStore } from './stores/chatStore'
 
 const showConfigPanel = ref(false)
 const showGraphPanel = ref(false)
+const showHistoryPanel = ref(false)
 const graphPanelWidth = ref(384)
-const uiStore = useUIStore()
 const chatStore = useChatStore()
-
-const selectedTheme = computed(() => uiStore.selectedTheme)
 
 const toggleConfigPanel = () => {
   showConfigPanel.value = !showConfigPanel.value
@@ -104,11 +110,8 @@ const toggleGraphPanel = () => {
   showGraphPanel.value = !showGraphPanel.value
 }
 
-const onThemeChange = (event: Event) => {
-  const target = event.target as HTMLSelectElement
-  if (target.value === 'light' || target.value === 'dark' || target.value === 'system') {
-    uiStore.setTheme(target.value)
-  }
+const toggleHistoryPanel = () => {
+  showHistoryPanel.value = !showHistoryPanel.value
 }
 
 watch(
