@@ -2,13 +2,72 @@
 @tailwind components;
 @tailwind utilities;
 
+:root {
+  --color-bg: #f5f7fb;
+  --color-surface: #ffffff;
+  --color-surface-muted: #eef2f7;
+  --color-text: #111827;
+  --color-text-muted: #4b5563;
+  --color-border: #d1d5db;
+  --color-accent: #2563eb;
+  --color-accent-contrast: #ffffff;
+  --color-success: #16a34a;
+}
+
+html.theme-dark {
+  --color-bg: #0b1220;
+  --color-surface: #111827;
+  --color-surface-muted: #1f2937;
+  --color-text: #e5e7eb;
+  --color-text-muted: #9ca3af;
+  --color-border: #374151;
+  --color-accent: #60a5fa;
+  --color-accent-contrast: #0f172a;
+  --color-success: #22c55e;
+}
+
 html,
 body {
   height: 100%;
   margin: 0;
   padding: 0;
+  background: var(--color-bg);
+  color: var(--color-text);
 }
 
 #app {
   height: 100%;
+}
+
+.app-bg {
+  background: var(--color-bg);
+}
+
+.app-surface {
+  background: var(--color-surface);
+}
+
+.app-surface-muted {
+  background: var(--color-surface-muted);
+}
+
+.app-text {
+  color: var(--color-text);
+}
+
+.app-text-muted {
+  color: var(--color-text-muted);
+}
+
+.app-border {
+  border-color: var(--color-border);
+}
+
+.btn-primary {
+  background: var(--color-accent);
+  color: var(--color-accent-contrast);
+}
+
+.btn-primary:hover {
+  filter: brightness(0.95);
 }

@@ -4,7 +4,7 @@
     <div class="flex-1 overflow-y-auto p-6 space-y-4" ref="messagesContainer">
       <div
         v-if="messages.length === 0"
-        class="flex items-center justify-center h-full text-gray-400"
+        class="flex items-center justify-center h-full app-text-muted"
       >
         <p class="text-center">
           <span class="text-3xl mb-2 block">💬</span>
@@ -17,7 +17,7 @@
         :message="msg"
       />
       <div v-if="isLoading" class="flex justify-start">
-        <div class="bg-gray-200 rounded-lg px-4 py-2 flex items-center gap-2">
+        <div class="app-surface-muted rounded-lg px-4 py-2 flex items-center gap-2 app-text">
           <span class="flex-shrink-0 w-5 h-5 rounded-full bg-green-600 text-white text-[10px] font-semibold flex items-center justify-center">
             A
           </span>
@@ -27,19 +27,20 @@
     </div>
 
     <!-- Input Area -->
-    <div class="border-t border-gray-200 bg-white p-6">
+    <div class="border-t app-border app-surface p-6">
       <form @submit.prevent="sendMessage" class="flex gap-3">
         <input
           v-model="inputValue"
           :disabled="isLoading"
           type="text"
           placeholder="Type your message..."
-          class="flex-1 px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:bg-gray-100"
+          class="flex-1 px-4 py-2 border app-border rounded-lg focus:outline-none focus:ring-2 disabled:opacity-60 app-surface app-text"
+          style="--tw-ring-color: var(--color-accent);"
         />
         <button
           type="submit"
           :disabled="isLoading || !inputValue.trim()"
-          class="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:bg-gray-400 disabled:cursor-not-allowed transition-colors"
+          class="px-6 py-2 btn-primary rounded-lg disabled:opacity-60 disabled:cursor-not-allowed transition-colors"
         >
           Send
         </button>

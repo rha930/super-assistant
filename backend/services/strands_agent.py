@@ -29,21 +29,102 @@ class StrandsAgentService:
         self.model = model or OLLAMA_MODEL or 'gemma4'
         logger.info("Ollama service initialized at %s with model %s", self.base_url, self.model)
 
-    def _build_prompt(self, user_message: str, system_prompt: Optional[str] = None) -> str:
+    def _wants_visualization(self, user_message: str) -> bool:
+        text = (user_message or '').lower()
+        keywords = [
+            'plot', 'chart', 'graph', 'visualize', 'visualise', 'trend',
+            'compare', 'comparison', 'distribution', 'histogram',
+            'line chart', 'bar chart', 'pie chart'
+        ]
+        return any(keyword in text for keyword in keywords)
+
+    def _graph_output_instructions(self) -> str:
+        return (
+            "When the user asks for a chart/graph/visualization and data is available, "
+            "you MUST include one JSON graph artifact in a fenced ```json block using this exact schema:\n"
+            "{\n"
+            "  \"type\": \"graph\",\n"
+            "  \"graph\": {\n"
+            "    \"id\": \"graph_unique_id\",\n"
+            "    \"title\": \"Descriptive title\",\n"
+            "    \"chartType\": \"line\" | \"bar\" | \"pie\",\n"
+            "    \"xLabel\": \"Category\",\n"
+            "    \"yLabel\": \"Value\",\n"
+            "    \"series\": [\n"
+            "      {\n"
+            "        \"name\": \"Series 1\",\n"
+            "        \"data\": [\n"
+            "          {\"x\": \"Label 1\", \"y\": 10},\n"
+            "          {\"x\": \"Label 2\", \"y\": 20}\n"
+            "        ]\n"
+            "      }\n"
+            "    ],\n"
+            "    \"options\": {\"showLegend\": true, \"stacked\": false}\n"
+            "  }\n"
+            "}\n"
+            "Rules: only use chartType line/bar/pie; y must be numeric; include at least 2 data points; "
+            "keep JSON valid and do not include comments. Also include a short plain-language summary outside the JSON block."
+        )
+
+    def _build_prompt(
+        self,
+        user_message: str,
+        system_prompt: Optional[str] = None,
+        conversation_history: Optional[list] = None,
+        max_messages: int = 12,
+        max_input_chars: int = 12000
+    ) -> str:
+        sections = []
+
         if system_prompt:
-            return f"System: {system_prompt}\n\nUser: {user_message}\nAssistant:"
-        return user_message
+            sections.append(f"System: {system_prompt}")
+
+        if self._wants_visualization(user_message):
+            sections.append(f"System: {self._graph_output_instructions()}")
+
+        history = conversation_history or []
+        if max_messages > 0 and history:
+            history = history[-max_messages:]
+
+        for item in history:
+            role = str(item.get('role', '')).strip().lower()
+            content = str(item.get('content', '')).strip()
+            if not content:
+                continue
+
+            if role == 'user':
+                sections.append(f"User: {content}")
+            elif role in ('assistant', 'agent'):
+                sections.append(f"Assistant: {content}")
+            else:
+                sections.append(f"Context: {content}")
+
+        sections.append(f"User: {user_message}")
+        sections.append("Assistant:")
+
+        prompt = "\n\n".join(sections)
+        if len(prompt) > max_input_chars:
+            prompt = prompt[-max_input_chars:]
+
+        return prompt
 
     def stream_agent(
         self,
         user_message: str,
         system_prompt: Optional[str] = None,
+        conversation_history: Optional[list] = None,
         **kwargs
     ) -> Generator[Dict[str, Any], None, None]:
         """Stream response chunks from Ollama /api/generate."""
         try:
             model = kwargs.get('model', self.model)
-            prompt = self._build_prompt(user_message, system_prompt)
+            prompt = self._build_prompt(
+                user_message=user_message,
+                system_prompt=system_prompt,
+                conversation_history=conversation_history,
+                max_messages=kwargs.get('context_max_messages', 12),
+                max_input_chars=kwargs.get('context_max_input_chars', 12000)
+            )
 
             options = {
                 'temperature': kwargs.get('temperature', 0.7),
@@ -115,6 +196,7 @@ class StrandsAgentService:
         session_id: Optional[str],
         user_message: str,
         system_prompt: Optional[str] = None,
+        conversation_history: Optional[list] = None,
         **kwargs
     ) -> Dict[str, Any]:
         """
@@ -136,6 +218,7 @@ class StrandsAgentService:
         for event in self.stream_agent(
             user_message=user_message,
             system_prompt=system_prompt,
+            conversation_history=conversation_history,
             **kwargs
         ):
             if event.get('chunk'):

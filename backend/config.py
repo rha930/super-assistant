@@ -22,6 +22,8 @@ DEFAULT_TOP_P = float(os.getenv('DEFAULT_TOP_P', '0.9'))
 DEFAULT_SYSTEM_PROMPT = os.getenv('DEFAULT_SYSTEM_PROMPT', 'You are a helpful AI assistant.')
 DEFAULT_MAX_ITERATIONS = int(os.getenv('DEFAULT_MAX_ITERATIONS', '10'))
 DEFAULT_TIMEOUT = int(os.getenv('DEFAULT_TIMEOUT', '30'))
+CONTEXT_MAX_MESSAGES = int(os.getenv('CONTEXT_MAX_MESSAGES', '12'))
+CONTEXT_MAX_INPUT_CHARS = int(os.getenv('CONTEXT_MAX_INPUT_CHARS', '12000'))
 
 # Default Config
 DEFAULT_CONFIG = {
@@ -35,5 +37,9 @@ DEFAULT_CONFIG = {
     'agent_config': {
         'max_iterations': DEFAULT_MAX_ITERATIONS,
         'timeout': DEFAULT_TIMEOUT
+    },
+    'context_config': {
+        'max_messages': CONTEXT_MAX_MESSAGES,
+        'max_input_chars': CONTEXT_MAX_INPUT_CHARS
     }
 }

@@ -10,18 +10,20 @@
   },
   "dependencies": {
     "axios": "^1.5.0",
+    "chart.js": "^4.4.1",
     "dompurify": "^3.4.11",
     "marked": "^18.0.5",
     "pinia": "^2.1.6",
-    "vue": "^3.3.4"
+    "vue": "^3.3.4",
+    "vue-chartjs": "^5.3.0"
   },
   "devDependencies": {
-    "@vitejs/plugin-vue": "^4.3.4",
+    "@vitejs/plugin-vue": "^6.0.0",
     "autoprefixer": "^10.4.16",
     "postcss": "^8.4.31",
     "tailwindcss": "^3.3.3",
     "typescript": "^5.2.2",
-    "vite": "^4.4.11",
-    "vue-tsc": "^1.8.13"
+    "vite": "^8.1.0",
+    "vue-tsc": "^3.3.5"
   }
 }

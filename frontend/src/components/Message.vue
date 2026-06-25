@@ -13,18 +13,18 @@
     <!-- Message Content -->
     <div class="flex-1">
       <div class="flex items-center gap-2">
-        <span class="font-semibold text-sm text-gray-900">
+        <span class="font-semibold text-sm app-text">
           {{ message.role === 'user' ? 'You' : 'Agent' }}
         </span>
-        <span class="text-xs text-gray-500">
+        <span class="text-xs app-text-muted">
           {{ formatTime(message.timestamp) }}
         </span>
       </div>
       <div
-        class="text-gray-800 mt-1 break-words markdown-content"
+        class="app-text mt-1 break-words markdown-content"
         v-html="renderedContent"
       ></div>
-      <div v-if="message.metadata?.tool_calls" class="mt-2 text-xs text-gray-600">
+      <div v-if="message.metadata?.tool_calls" class="mt-2 text-xs app-text-muted">
         <span class="font-semibold">Tool calls:</span> {{ message.metadata.tool_calls.length }}
       </div>
     </div>
@@ -74,19 +74,20 @@ const formatTime = (timestamp: Date) => {
 }
 
 .markdown-content :deep(code) {
-  background: #f3f4f6;
+  background: var(--color-surface-muted);
   padding: 0.1rem 0.35rem;
   border-radius: 0.25rem;
   font-size: 0.85em;
 }
 
 .markdown-content :deep(pre) {
-  background: #111827;
-  color: #e5e7eb;
+  background: var(--color-surface-muted);
+  color: var(--color-text);
   padding: 0.75rem;
   border-radius: 0.5rem;
   overflow-x: auto;
   margin: 0.4rem 0;
+  border: 1px solid var(--color-border);
 }
 
 .markdown-content :deep(pre code) {
@@ -96,7 +97,7 @@ const formatTime = (timestamp: Date) => {
 }
 
 .markdown-content :deep(a) {
-  color: #2563eb;
+  color: var(--color-accent);
   text-decoration: underline;
 }
 </style>

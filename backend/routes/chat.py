@@ -95,25 +95,39 @@ def stream_message():
                     if chunk:
                         full_response += chunk
 
+                    if done:
+                        final_metadata = metadata
+                        break
+
                     payload = {
                         'conversation_id': cid,
                         'chunk': chunk,
-                        'done': done,
+                        'done': False,
                         'metadata': metadata,
                         'thinking': thinking
                     }
                     yield f"data: {json.dumps(payload)}\n\n"
 
-                    if done:
-                        final_metadata = metadata
-                        break
-
                 if cid:
-                    chat_service.finalize_stream_message(
+                    artifacts = chat_service.finalize_stream_message(
                         conversation_id=cid,
                         content=full_response,
                         metadata=final_metadata
                     )
+
+                    # Emit a deterministic final done event carrying artifacts for the Graph Panel.
+                    final_payload = {
+                        'conversation_id': cid,
+                        'chunk': '',
+                        'done': True,
+                        'metadata': {
+                            **(final_metadata or {}),
+                            'artifacts': artifacts
+                        },
+                        'artifacts': artifacts,
+                        'thinking': 'Done.'
+                    }
+                    yield f"data: {json.dumps(final_payload)}\n\n"
             except Exception as e:
                 logger.error(f"Error in stream endpoint: {e}")
                 err_payload = {

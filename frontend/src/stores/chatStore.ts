@@ -1,12 +1,16 @@
 import { defineStore } from 'pinia'
-import { ref } from 'vue'
+import { ref, computed } from 'vue'
 import type { Message } from '../types/message'
+import type { GraphPayload } from '../types/graph'
 import { api } from '../services/api'
+import { extractGraphArtifacts } from '../services/graphValidator'
 import { useUIStore } from './uiStore'
 
 export const useChatStore = defineStore('chat', () => {
   const messages = ref<Message[]>([])
   const currentConversationId = ref<string>('')
+  const graphsByConversationId = ref<Map<string, GraphPayload[]>>(new Map())
+  const selectedGraphIdByConversationId = ref<Map<string, string>>(new Map())
   const uiStore = useUIStore()
 
   const addMessage = (message: Message) => {
@@ -20,6 +24,43 @@ export const useChatStore = defineStore('chat', () => {
         ...messages.value[idx],
         ...partial
       }
+    }
+  }
+
+  const currentGraphs = computed(() => {
+    return graphsByConversationId.value.get(currentConversationId.value) || []
+  })
+
+  const selectedGraphId = computed(() => {
+    return selectedGraphIdByConversationId.value.get(currentConversationId.value)
+  })
+
+  const selectedGraph = computed(() => {
+    if (!selectedGraphId.value) return null
+    return currentGraphs.value.find((g) => g.id === selectedGraphId.value) || null
+  })
+
+  const addGraphs = (graphs: GraphPayload[]) => {
+    if (graphs.length === 0) return
+    const existing = graphsByConversationId.value.get(currentConversationId.value) || []
+    const merged = [...existing]
+
+    for (const graph of graphs) {
+      const alreadyExists = merged.some((g) => g.id === graph.id)
+      if (!alreadyExists) {
+        merged.push(graph)
+      }
+    }
+
+    graphsByConversationId.value.set(currentConversationId.value, merged)
+    if (merged.length > 0 && !selectedGraphId.value) {
+      selectedGraphIdByConversationId.value.set(currentConversationId.value, merged[0].id)
+    }
+  }
+
+  const selectGraph = (graphId: string) => {
+    if (currentGraphs.value.some((g) => g.id === graphId)) {
+      selectedGraphIdByConversationId.value.set(currentConversationId.value, graphId)
     }
   }
 
@@ -109,6 +150,14 @@ export const useChatStore = defineStore('chat', () => {
 
           if (payload.done) {
             updateMessage(agentMessageId, { metadata: payload.metadata || {} })
+            // Extract and add graphs from message artifacts
+            const artifactSource = payload.artifacts || payload.metadata?.artifacts
+            if (artifactSource) {
+              const graphs = extractGraphArtifacts(artifactSource)
+              if (graphs.length > 0) {
+                addGraphs(graphs)
+              }
+            }
             uiStore.clearThinking()
           }
         }
@@ -146,10 +195,15 @@ export const useChatStore = defineStore('chat', () => {
   return {
     messages,
     currentConversationId,
+    currentGraphs,
+    selectedGraphId,
+    selectedGraph,
     addMessage,
     updateMessage,
     sendMessage,
     clearMessages,
-    loadHistory
+    loadHistory,
+    addGraphs,
+    selectGraph
   }
 })

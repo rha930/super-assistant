@@ -47,6 +47,12 @@ class ConfigService:
             # Update agent config
             if 'agent_config' in new_config:
                 self.config['agent_config'].update(new_config['agent_config'])
+
+            # Update context config
+            if 'context_config' in new_config:
+                if 'context_config' not in self.config:
+                    self.config['context_config'] = {}
+                self.config['context_config'].update(new_config['context_config'])
             
             logger.info("Configuration updated successfully")
             return self.get_config()
