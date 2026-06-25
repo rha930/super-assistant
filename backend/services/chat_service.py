@@ -60,11 +60,17 @@ class ChatService:
                 context_max_input_chars=context_cfg.get('max_input_chars', 12000)
             )
             agent_response = agent_result.get('response', '')
-            artifacts = self.graph_artifact_service.create_graph_artifacts(message, agent_response)
+            
+            # Only generate graph artifacts if user message indicates visualization intent
+            artifacts = []
+            if self.agent._wants_visualization(message):
+                artifacts = self.graph_artifact_service.create_graph_artifacts(message, agent_response)
+            
             logger.info(
-                "Graph artifacts generated (sync): conversation_id=%s count=%s",
+                "Graph artifacts generated (sync): conversation_id=%s count=%s intent=%s",
                 conversation_id,
-                len(artifacts)
+                len(artifacts),
+                self.agent._wants_visualization(message)
             )
             context_meta = {
                 'history_message_count': len(history),
@@ -168,11 +174,16 @@ class ChatService:
                     user_prompt = msg.get('content', '')
                     break
 
-        artifacts = self.graph_artifact_service.create_graph_artifacts(user_prompt, content)
+        # Only generate graph artifacts if user message indicates visualization intent
+        artifacts = []
+        if self.agent._wants_visualization(user_prompt):
+            artifacts = self.graph_artifact_service.create_graph_artifacts(user_prompt, content)
+        
         logger.info(
-            "Graph artifacts generated (stream): conversation_id=%s count=%s",
+            "Graph artifacts generated (stream): conversation_id=%s count=%s intent=%s",
             conversation_id,
-            len(artifacts)
+            len(artifacts),
+            self.agent._wants_visualization(user_prompt)
         )
 
         agent_msg = Message(
