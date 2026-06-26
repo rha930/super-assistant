@@ -14,22 +14,10 @@ interface ConversationSummary {
   preview: string
 }
 
-const USER_ID_STORAGE_KEY = 'chat.user_id'
-
-const ensureUserId = (): string => {
-  const existing = localStorage.getItem(USER_ID_STORAGE_KEY)
-  if (existing && existing.trim()) {
-    return existing
-  }
-  const generated = `user_${crypto.randomUUID()}`
-  localStorage.setItem(USER_ID_STORAGE_KEY, generated)
-  return generated
-}
-
 export const useChatStore = defineStore('chat', () => {
   const messages = ref<Message[]>([])
   const currentConversationId = ref<string>('')
-  const userId = ref<string>(ensureUserId())
+  const userId = ref<string>('')
   const conversations = ref<ConversationSummary[]>([])
   const isLoadingConversations = ref<boolean>(false)
   const graphsByConversationId = ref<Map<string, GraphPayload[]>>(new Map())
@@ -114,16 +102,20 @@ export const useChatStore = defineStore('chat', () => {
 
     try {
       const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:5000'
+      const token = localStorage.getItem('auth.token')
+      const headers: Record<string, string> = {
+        'Content-Type': 'application/json'
+      }
+      if (token) {
+        headers['Authorization'] = `Bearer ${token}`
+      }
+
       const response = await fetch(`${apiUrl}/api/chat/stream`, {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'X-User-Id': userId.value
-        },
+        headers,
         body: JSON.stringify({
           message: content,
-          conversation_id: currentConversationId.value,
-          user_id: userId.value
+          conversation_id: currentConversationId.value
         })
       })
 
@@ -211,11 +203,7 @@ export const useChatStore = defineStore('chat', () => {
 
   const loadHistory = async (conversationId: string) => {
     try {
-      const response = await api.get(`/api/chat/history/${conversationId}`, {
-        headers: {
-          'X-User-Id': userId.value
-        }
-      })
+      const response = await api.get(`/api/chat/history/${conversationId}`)
       const history = response.data?.data?.messages || []
       messages.value = history.map((m: any) => ({
         id: m.id || `msg_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
@@ -234,10 +222,7 @@ export const useChatStore = defineStore('chat', () => {
     isLoadingConversations.value = true
     try {
       const response = await api.get('/api/chat/conversations', {
-        params: { limit },
-        headers: {
-          'X-User-Id': userId.value
-        }
+        params: { limit }
       })
       conversations.value = response.data?.data?.conversations || []
     } catch (error) {

@@ -28,12 +28,76 @@
         </select>
       </div>
 
-      <!-- Active Model -->
+      <!-- Model Selection -->
       <div>
-        <h3 class="text-sm font-semibold app-text mb-2">Active Model</h3>
-        <div class="inline-flex items-center px-3 py-1 rounded-full app-surface-muted border app-border text-xs font-mono app-text">
+        <div class="flex items-center justify-between mb-2">
+          <h3 class="text-sm font-semibold app-text">Model</h3>
+          <button
+            @click="refreshModels"
+            :disabled="modelsLoading"
+            class="p-1 app-text-muted rounded hover:opacity-80 transition-opacity disabled:opacity-40"
+            aria-label="Refresh model list"
+            title="Refresh model list"
+          >
+            <svg
+              xmlns="http://www.w3.org/2000/svg"
+              viewBox="0 0 24 24"
+              fill="currentColor"
+              class="w-4 h-4"
+              :class="{ 'animate-spin': modelsLoading }"
+            >
+              <path d="M17.65 6.35A7.96 7.96 0 0 0 12 4c-4.42 0-7.99 3.58-7.99 8s3.57 8 7.99 8c3.73 0 6.84-2.55 7.73-6h-2.08A5.99 5.99 0 0 1 12 18c-3.31 0-6-2.69-6-6s2.69-6 6-6c1.66 0 3.14.69 4.22 1.78L13 11h7V4l-2.35 2.35z" />
+            </svg>
+          </button>
+        </div>
+
+        <!-- Current model badge (always visible) -->
+        <div class="inline-flex items-center px-3 py-1 rounded-full app-surface-muted border app-border text-xs font-mono app-text mb-2">
           {{ activeModel }}
         </div>
+
+        <!-- Stale model warning -->
+        <div
+          v-if="isModelStale"
+          class="mb-2 px-3 py-2 text-xs rounded-lg border border-yellow-400 bg-yellow-50 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-300 dark:border-yellow-700"
+        >
+          Current model is no longer available. Select another model below.
+        </div>
+
+        <!-- Runtime error warning -->
+        <div
+          v-if="configStore.modelsError"
+          class="mb-2 px-3 py-2 text-xs rounded-lg border border-red-300 bg-red-50 text-red-700 dark:bg-red-900/30 dark:text-red-300 dark:border-red-700"
+        >
+          {{ configStore.modelsError }}
+        </div>
+
+        <!-- Model dropdown -->
+        <select
+          v-model="config.model"
+          :disabled="modelsLoading || noModelsAvailable"
+          class="w-full px-3 py-2 border app-border rounded-lg text-sm app-surface app-text disabled:opacity-60"
+          aria-label="Select model"
+        >
+          <option v-if="noModelsAvailable" value="" disabled>
+            No local models available. Pull a model first.
+          </option>
+          <option
+            v-for="model in configStore.availableModels"
+            :key="model"
+            :value="model"
+          >
+            {{ model }}
+          </option>
+          <!-- Keep stale model visible as an option so the value isn't lost -->
+          <option
+            v-if="isModelStale && config.model"
+            :value="config.model"
+            disabled
+          >
+            {{ config.model }} (unavailable)
+          </option>
+        </select>
       </div>
 
       <!-- Model Parameters Section -->
@@ -138,7 +202,7 @@
     <div class="border-t app-border p-4 space-y-2">
       <button
         @click="saveConfig"
-        :disabled="isSaving"
+        :disabled="isSaving || !canSave"
         class="w-full px-4 py-2 btn-primary rounded-lg disabled:opacity-60 transition-colors"
       >
         {{ isSaving ? 'Saving...' : 'Save Configuration' }}
@@ -194,13 +258,48 @@ const activeModel = computed(() => {
   return value || 'No active model configured'
 })
 
+const modelsLoading = computed(() => configStore.modelsLoading)
+
+const noModelsAvailable = computed(() =>
+  !configStore.modelsLoading && configStore.availableModels.length === 0
+)
+
+const isModelStale = computed(() => {
+  const model = (config.model || '').trim()
+  if (!model) return false
+  if (configStore.availableModels.length === 0) return false
+  return !configStore.availableModels.includes(model)
+})
+
+const canSave = computed(() => {
+  const model = (config.model || '').trim()
+  if (!model) return false
+  if (isModelStale.value) return false
+  return true
+})
+
+const refreshModels = async () => {
+  await configStore.loadAvailableModels()
+}
+
 onMounted(async () => {
   await configStore.loadConfig()
   const stored = configStore.getConfig()
   Object.assign(config, stored)
+  await configStore.loadAvailableModels()
 })
 
 const saveConfig = async () => {
+  const model = (config.model || '').trim()
+  if (!model) {
+    alert('Please select a model before saving.')
+    return
+  }
+  if (configStore.availableModels.length > 0 && !configStore.availableModels.includes(model)) {
+    alert('Selected model is no longer available. Please choose another.')
+    return
+  }
+
   isSaving.value = true
   try {
     await configStore.saveConfig(config)

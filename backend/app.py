@@ -1,7 +1,8 @@
 from flask import Flask
 from flask_cors import CORS
 import logging
-from datetime import datetime
+import os
+import secrets
 
 # Configure logging
 logging.basicConfig(
@@ -17,11 +18,32 @@ def create_app():
     # Enable CORS
     CORS(app)
     
+    # --- Auth setup ---
+    from config import AUTH_ENABLED, AUTH_SECRET_KEY, AUTH_TOKEN_EXPIRY_HOURS, AUTH_USERS_FILE
+    from services.auth_service import AuthService
+    from middleware.auth import init_auth
+    from routes.auth import auth_bp, init_auth_routes
+
+    secret_key = AUTH_SECRET_KEY
+    if not secret_key:
+        secret_key = secrets.token_hex(32)
+        logger.warning('AUTH_SECRET_KEY not set — generated ephemeral key (will not persist across restarts)')
+
+    auth_service = AuthService(
+        users_file=AUTH_USERS_FILE,
+        secret_key=secret_key,
+        token_expiry_hours=AUTH_TOKEN_EXPIRY_HOURS,
+    )
+    init_auth(auth_service, enabled=AUTH_ENABLED)
+    init_auth_routes(auth_service)
+    logger.info('Auth enabled=%s  users_file=%s', AUTH_ENABLED, AUTH_USERS_FILE)
+
     # Register blueprints
     from routes.chat import chat_bp
     from routes.config import config_bp
     from routes.health import health_bp
-    
+
+    app.register_blueprint(auth_bp)
     app.register_blueprint(chat_bp)
     app.register_blueprint(config_bp)
     app.register_blueprint(health_bp)

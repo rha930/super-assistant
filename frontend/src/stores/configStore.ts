@@ -32,9 +32,27 @@ const DEFAULT_CONFIG: Config = {
 
 export const useConfigStore = defineStore('config', () => {
   const config = ref<Config>(DEFAULT_CONFIG)
+  const availableModels = ref<string[]>([])
+  const modelsLoading = ref(false)
+  const modelsError = ref<string | null>(null)
 
   const getConfig = (): Config => {
     return config.value
+  }
+
+  const loadAvailableModels = async () => {
+    modelsLoading.value = true
+    modelsError.value = null
+    try {
+      const response = await api.get('/api/models')
+      availableModels.value = response.data?.data?.models || []
+    } catch (error: any) {
+      const msg = error?.response?.data?.message || 'Failed to load models'
+      modelsError.value = msg
+      console.error('Failed to load available models:', error)
+    } finally {
+      modelsLoading.value = false
+    }
   }
 
   const saveConfig = async (newConfig: Config) => {
@@ -62,7 +80,11 @@ export const useConfigStore = defineStore('config', () => {
 
   return {
     config,
+    availableModels,
+    modelsLoading,
+    modelsError,
     getConfig,
+    loadAvailableModels,
     saveConfig,
     loadConfig,
     resetConfig

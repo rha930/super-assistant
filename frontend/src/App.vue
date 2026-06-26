@@ -1,10 +1,21 @@
 <template>
-  <div id="app" class="h-screen flex flex-col app-bg app-text">
+  <!-- Auth check loading -->
+  <div v-if="authLoading" class="h-screen flex items-center justify-center app-bg app-text">
+    <p class="app-text-muted">Loading...</p>
+  </div>
+
+  <!-- Login page when not authenticated -->
+  <LoginPage v-else-if="!isAuthenticated" />
+
+  <!-- Main app when authenticated -->
+  <div v-else id="app" class="h-screen flex flex-col app-bg app-text">
     <!-- Header -->
     <header class="app-surface border-b app-border px-6 py-4 shadow-sm">
       <div class="w-full flex items-center justify-between">
         <h1 class="text-2xl font-bold text-left">Super Agent</h1>
         <div class="flex items-center gap-3">
+          <span class="text-sm app-text-muted hidden sm:inline">{{ displayName }}</span>
+
           <button
             @click="toggleGraphPanel"
             class="p-2 app-text-muted rounded-lg transition-opacity hover:opacity-80"
@@ -42,6 +53,18 @@
               <rect x="4" y="6" width="16" height="2" rx="1"></rect>
               <rect x="4" y="11" width="16" height="2" rx="1"></rect>
               <rect x="4" y="16" width="16" height="2" rx="1"></rect>
+            </svg>
+          </button>
+
+          <button
+            @click="handleLogout"
+            class="p-2 app-text-muted rounded-lg transition-opacity hover:opacity-80"
+            aria-label="Log out"
+            title="Log out"
+          >
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" class="w-6 h-6">
+              <path d="M5 5h7V3H3v18h9v-2H5z"></path>
+              <path d="M21 12l-4-4v3H9v2h8v3z"></path>
             </svg>
           </button>
         </div>
@@ -89,18 +112,25 @@
 </template>
 
 <script setup lang="ts">
-import { ref, watch } from 'vue'
+import { ref, watch, computed, onMounted } from 'vue'
 import ChatWindow from './components/ChatWindow.vue'
 import ConfigPanel from './components/ConfigPanel.vue'
 import GraphPanel from './components/GraphPanel.vue'
 import HistoryPanel from './components/HistoryPanel.vue'
+import LoginPage from './components/LoginPage.vue'
 import { useChatStore } from './stores/chatStore'
+import { useAuthStore } from './stores/authStore'
 
 const showConfigPanel = ref(false)
 const showGraphPanel = ref(false)
 const showHistoryPanel = ref(false)
 const graphPanelWidth = ref(384)
 const chatStore = useChatStore()
+const authStore = useAuthStore()
+
+const isAuthenticated = computed(() => authStore.isAuthenticated)
+const authLoading = computed(() => authStore.loading)
+const displayName = computed(() => authStore.user?.display_name || authStore.user?.username || '')
 
 const toggleConfigPanel = () => {
   showConfigPanel.value = !showConfigPanel.value
@@ -113,6 +143,14 @@ const toggleGraphPanel = () => {
 const toggleHistoryPanel = () => {
   showHistoryPanel.value = !showHistoryPanel.value
 }
+
+const handleLogout = () => {
+  authStore.logout()
+}
+
+onMounted(async () => {
+  await authStore.checkAuth()
+})
 
 watch(
   () => chatStore.currentGraphs.length,

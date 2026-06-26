@@ -1,7 +1,8 @@
-from flask import Blueprint, request, Response, stream_with_context
+from flask import Blueprint, request, Response, stream_with_context, g
 from services.chat_service import ChatService
 import json
 from models.response import SuccessResponse, ErrorResponse
+from middleware.auth import require_auth
 import logging
 
 logger = logging.getLogger(__name__)
@@ -9,18 +10,12 @@ chat_bp = Blueprint('chat', __name__, url_prefix='/api/chat')
 chat_service = ChatService()
 
 
-def _resolve_user_id(data=None):
-    """Resolve user identity from header first, then body, with safe fallback."""
-    header_user = request.headers.get('X-User-Id', '').strip()
-    if header_user:
-        return header_user
-    if data and isinstance(data, dict):
-        body_user = str(data.get('user_id', '')).strip()
-        if body_user:
-            return body_user
-    return 'anonymous'
+def _get_user_id() -> str:
+    """Get authenticated user_id from request context."""
+    return g.current_user.get('user_id', 'anonymous')
 
 @chat_bp.route('/message', methods=['POST'])
+@require_auth
 def send_message():
     """
     Send a message to the Strands agent.
@@ -39,7 +34,7 @@ def send_message():
         
         message = data['message']
         conversation_id = data.get('conversation_id')
-        user_id = _resolve_user_id(data)
+        user_id = _get_user_id()
         
         try:
             response = chat_service.process_message(message, conversation_id, user_id=user_id)
@@ -61,6 +56,7 @@ def send_message():
         return ErrorResponse(message='An unexpected error occurred').to_dict(), 500
 
 @chat_bp.route('/stream', methods=['POST'])
+@require_auth
 def stream_message():
     """Stream a message response from the agent using Server-Sent Events (SSE)."""
     try:
@@ -70,7 +66,7 @@ def stream_message():
 
         message = data['message']
         conversation_id = data.get('conversation_id')
-        user_id = _resolve_user_id(data)
+        user_id = _get_user_id()
 
         @stream_with_context
         def event_stream():
@@ -166,10 +162,11 @@ def stream_message():
         return ErrorResponse(message='An unexpected error occurred').to_dict(), 500
 
 @chat_bp.route('/history/<conversation_id>', methods=['GET'])
+@require_auth
 def get_history(conversation_id):
     """Get conversation history."""
     try:
-        user_id = _resolve_user_id(None)
+        user_id = _get_user_id()
         history = chat_service.get_history(conversation_id, user_id=user_id)
         return SuccessResponse(data={'messages': history}).to_dict(), 200
     except Exception as e:
@@ -178,10 +175,11 @@ def get_history(conversation_id):
 
 
 @chat_bp.route('/conversations', methods=['GET'])
+@require_auth
 def list_conversations():
     """List user conversations ordered by latest activity."""
     try:
-        user_id = _resolve_user_id(None)
+        user_id = _get_user_id()
         limit_raw = request.args.get('limit', '50')
         try:
             limit = max(1, min(200, int(limit_raw)))
@@ -195,10 +193,11 @@ def list_conversations():
         return ErrorResponse(message=str(e)).to_dict(), 500
 
 @chat_bp.route('/reset', methods=['DELETE'])
+@require_auth
 def reset_conversation():
     """Reset/clear the current conversation."""
     try:
-        user_id = _resolve_user_id(None)
+        user_id = _get_user_id()
         chat_service.reset(user_id=user_id)
         return SuccessResponse(message='Conversation reset').to_dict(), 200
     except Exception as e:

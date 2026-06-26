@@ -30,6 +30,12 @@ HISTORY_MAX_MESSAGES_PER_CONVERSATION = int(os.getenv('HISTORY_MAX_MESSAGES_PER_
 HISTORY_REDIS_URL = os.getenv('HISTORY_REDIS_URL', 'redis://localhost:6379/0')
 HISTORY_REDIS_PREFIX = os.getenv('HISTORY_REDIS_PREFIX', 'chat')
 
+# Authentication
+AUTH_ENABLED = os.getenv('AUTH_ENABLED', 'True') == 'True'
+AUTH_SECRET_KEY = os.getenv('AUTH_SECRET_KEY', '')
+AUTH_TOKEN_EXPIRY_HOURS = int(os.getenv('AUTH_TOKEN_EXPIRY_HOURS', '24'))
+AUTH_USERS_FILE = os.getenv('AUTH_USERS_FILE', './users.json')
+
 # Default Config
 DEFAULT_CONFIG = {
     'model': AGENT_MODEL,
