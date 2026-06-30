@@ -120,6 +120,11 @@ export const useChatStore = defineStore('chat', () => {
       })
 
       if (!response.ok) {
+        if (response.status === 401) {
+          localStorage.removeItem('auth.token')
+          window.location.reload()
+          return
+        }
         throw new Error(`Stream request failed: ${response.status}`)
       }
 

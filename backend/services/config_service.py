@@ -59,6 +59,15 @@ class ConfigService:
                 if 'history_config' not in self.config:
                     self.config['history_config'] = {}
                 self.config['history_config'].update(new_config['history_config'])
+
+            # Update tools config
+            if 'tools' in new_config:
+                if 'tools' not in self.config:
+                    self.config['tools'] = {}
+                for tool_name, tool_cfg in new_config['tools'].items():
+                    if tool_name not in self.config['tools']:
+                        self.config['tools'][tool_name] = {}
+                    self.config['tools'][tool_name].update(tool_cfg)
             
             logger.info("Configuration updated successfully")
             return self.get_config()

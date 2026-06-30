@@ -25,8 +25,12 @@ api.interceptors.response.use(
   response => response,
   error => {
     if (error?.response?.status === 401) {
-      localStorage.removeItem('auth.token')
-      window.location.reload()
+      // Don't redirect on login attempts — just surface the error
+      const url = error?.config?.url || ''
+      if (!url.includes('/api/auth/login')) {
+        localStorage.removeItem('auth.token')
+        window.location.reload()
+      }
     }
     console.error('API Error:', error)
     return Promise.reject(error)

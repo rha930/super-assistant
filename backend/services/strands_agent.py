@@ -38,6 +38,59 @@ class StrandsAgentService:
         ]
         return any(keyword in text for keyword in keywords)
 
+    def _needs_web_search(self, user_message: str) -> bool:
+        """Heuristic intent detection for whether a message needs web search."""
+        text = (user_message or '').lower()
+
+        # Explicit opt-out
+        opt_out = ["don't search", "do not search", "no search", "without searching"]
+        if any(phrase in text for phrase in opt_out):
+            return False
+
+        # Code / math exclusions — check first to avoid false positives
+        code_patterns = [
+            'write a function', 'write a class', 'write a script',
+            'create a function', 'create a class', 'create a component',
+            'fix this code', 'fix the code', 'debug this', 'refactor',
+            'implement a', 'write code', 'code example',
+            'calculate', 'solve', 'what is 2+2', 'compute',
+        ]
+        if any(p in text for p in code_patterns):
+            return False
+
+        # Temporal keywords
+        temporal = [
+            'latest', 'recent', 'recently', 'current', 'currently',
+            'today', 'yesterday', 'this week', 'this month', 'this year',
+            'right now', 'as of', 'breaking',
+            '2024', '2025', '2026', '2027',
+        ]
+        if any(t in text for t in temporal):
+            return True
+
+        # Lookup patterns
+        lookup = [
+            'what is the price', 'what is the cost',
+            'who won', 'who is winning', 'who lost',
+            'what happened', 'what is happening',
+            'news about', 'news on', 'latest news',
+            'score of', 'results of', 'standings',
+            'weather in', 'weather for', 'forecast',
+            'stock price', 'market cap',
+        ]
+        if any(l in text for l in lookup):
+            return True
+
+        # Explicit search requests
+        explicit = [
+            'search for', 'search the web', 'look up', 'look online',
+            'find online', 'google', 'search online', 'web search',
+        ]
+        if any(e in text for e in explicit):
+            return True
+
+        return False
+
     def _graph_output_instructions(self) -> str:
         return (
             "When the user asks for a chart/graph/visualization and data is available, "
@@ -72,7 +125,8 @@ class StrandsAgentService:
         system_prompt: Optional[str] = None,
         conversation_history: Optional[list] = None,
         max_messages: int = 12,
-        max_input_chars: int = 12000
+        max_input_chars: int = 12000,
+        tool_context: str = ''
     ) -> str:
         sections = []
 
@@ -81,6 +135,9 @@ class StrandsAgentService:
 
         if self._wants_visualization(user_message):
             sections.append(f"System: {self._graph_output_instructions()}")
+
+        if tool_context:
+            sections.append(tool_context)
 
         history = conversation_history or []
         if max_messages > 0 and history:
@@ -118,12 +175,14 @@ class StrandsAgentService:
         """Stream response chunks from Ollama /api/generate."""
         try:
             model = kwargs.get('model', self.model)
+            tool_context = kwargs.get('tool_context', '')
             prompt = self._build_prompt(
                 user_message=user_message,
                 system_prompt=system_prompt,
                 conversation_history=conversation_history,
                 max_messages=kwargs.get('context_max_messages', 12),
-                max_input_chars=kwargs.get('context_max_input_chars', 12000)
+                max_input_chars=kwargs.get('context_max_input_chars', 12000),
+                tool_context=tool_context
             )
 
             options = {

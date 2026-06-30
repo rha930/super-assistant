@@ -1,4 +1,4 @@
-from flask import Flask
+from flask import Flask, request
 from flask_cors import CORS
 import logging
 import os
@@ -42,11 +42,13 @@ def create_app():
     from routes.chat import chat_bp
     from routes.config import config_bp
     from routes.health import health_bp
+    from routes.tools import tools_bp
 
     app.register_blueprint(auth_bp)
     app.register_blueprint(chat_bp)
     app.register_blueprint(config_bp)
     app.register_blueprint(health_bp)
+    app.register_blueprint(tools_bp)
     
     @app.before_request
     def before_request():
@@ -64,6 +66,5 @@ def create_app():
     return app
 
 if __name__ == '__main__':
-    from flask import request
     app = create_app()
     app.run(debug=True, host='0.0.0.0', port=5000)

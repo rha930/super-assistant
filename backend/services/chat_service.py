@@ -1,11 +1,12 @@
 import logging
 import uuid
 from typing import Optional, Dict, Any
-from config import DEFAULT_CONFIG
+from config import DEFAULT_CONFIG, WEB_SEARCH_TIMEOUT
 from models.message import Message
 from services.history_repository import ChatHistoryRepository
 from services.strands_agent import StrandsAgentService
 from services.graph_artifact_service import GraphArtifactService
+from services.web_search_service import WebSearchService, format_search_context
 from services.history_repository_local import LocalChatHistoryRepository
 from services.history_repository_redis import RedisChatHistoryRepository
 
@@ -19,6 +20,7 @@ class ChatService:
         self.current_conversation_id: Optional[str] = None
         self.agent = StrandsAgentService()
         self.graph_artifact_service = GraphArtifactService()
+        self.web_search_service = WebSearchService(timeout=WEB_SEARCH_TIMEOUT)
         self.config: Dict[str, Any] = DEFAULT_CONFIG.copy()
         history_cfg = self.config.get('history_config', {})
         self.history_repo: ChatHistoryRepository = self._build_history_repo(history_cfg)
@@ -77,6 +79,26 @@ class ChatService:
 
             history = self._build_context_history(user_id, conversation_id)
             context_cfg = self.config.get('context_config', {})
+            tools_cfg = self.config.get('tools', {})
+            ws_cfg = tools_cfg.get('web_search', {})
+
+            # Pre-prompt web search
+            search_context = ''
+            search_tool_call = None
+            if ws_cfg.get('enabled', False) and self.web_search_service.is_available():
+                if self.agent._needs_web_search(message):
+                    results = self.web_search_service.search(
+                        message,
+                        max_results=int(ws_cfg.get('max_results', 5)),
+                    )
+                    if results:
+                        search_context = format_search_context(results)
+                        search_tool_call = {
+                            'tool': 'web_search',
+                            'query': message,
+                            'result_count': len(results),
+                            'sources': [{'title': r.title, 'url': r.url} for r in results],
+                        }
             
             agent_result = self.agent.invoke_agent(
                 agent_id=None,
@@ -89,9 +111,15 @@ class ChatService:
                 top_p=self.config.get('model_parameters', {}).get('top_p', 0.9),
                 max_tokens=self.config.get('model_parameters', {}).get('max_tokens', 1000),
                 context_max_messages=context_cfg.get('max_messages', 12),
-                context_max_input_chars=context_cfg.get('max_input_chars', 12000)
+                context_max_input_chars=context_cfg.get('max_input_chars', 12000),
+                tool_context=search_context
             )
             agent_response = agent_result.get('response', '')
+
+            # Merge tool_calls from agent metadata with search tool call
+            agent_tool_calls = agent_result.get('metadata', {}).get('tool_calls', [])
+            if search_tool_call:
+                agent_tool_calls = [search_tool_call] + agent_tool_calls
             
             # Only generate graph artifacts if user message indicates visualization intent
             artifacts = []
@@ -115,6 +143,7 @@ class ChatService:
                 content=agent_response,
                 metadata={
                     **agent_result.get('metadata', {'tokens_used': 0, 'tool_calls': []}),
+                    'tool_calls': agent_tool_calls,
                     'artifacts': artifacts,
                     'context': context_meta
                 }
@@ -163,6 +192,26 @@ class ChatService:
             cid = self.start_conversation(message, conversation_id, user_id)
             history = self._build_context_history(user_id, cid)
             context_cfg = self.config.get('context_config', {})
+            tools_cfg = self.config.get('tools', {})
+            ws_cfg = tools_cfg.get('web_search', {})
+
+            # Pre-prompt web search
+            search_context = ''
+            search_tool_call = None
+            if ws_cfg.get('enabled', False) and self.web_search_service.is_available():
+                if self.agent._needs_web_search(message):
+                    results = self.web_search_service.search(
+                        message,
+                        max_results=int(ws_cfg.get('max_results', 5)),
+                    )
+                    if results:
+                        search_context = format_search_context(results)
+                        search_tool_call = {
+                            'tool': 'web_search',
+                            'query': message,
+                            'result_count': len(results),
+                            'sources': [{'title': r.title, 'url': r.url} for r in results],
+                        }
 
             stream = self.agent.stream_agent(
                 user_message=message,
@@ -173,7 +222,8 @@ class ChatService:
                 top_p=self.config.get('model_parameters', {}).get('top_p', 0.9),
                 max_tokens=self.config.get('model_parameters', {}).get('max_tokens', 1000),
                 context_max_messages=context_cfg.get('max_messages', 12),
-                context_max_input_chars=context_cfg.get('max_input_chars', 12000)
+                context_max_input_chars=context_cfg.get('max_input_chars', 12000),
+                tool_context=search_context
             )
 
             for event in stream:
@@ -181,10 +231,13 @@ class ChatService:
                 done = event.get('done', False)
 
                 if done:
-                    # Build artifacts from final response content for deterministic done payload delivery.
-                    # The route aggregates chunks and persists the final message content.
+                    # Merge search tool call into final metadata
+                    done_tool_calls = metadata.get('tool_calls', [])
+                    if search_tool_call:
+                        done_tool_calls = [search_tool_call] + done_tool_calls
                     metadata = {
                         **metadata,
+                        'tool_calls': done_tool_calls,
                         'artifacts': []
                     }
 
