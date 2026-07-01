@@ -12,10 +12,9 @@ describe('chatStore', () => {
     expect(store.messages).toEqual([])
   })
 
-  it('initializes with a user id', () => {
+  it('initializes with an empty user id', () => {
     const store = useChatStore()
-    expect(store.userId).toBeTruthy()
-    expect(store.userId.startsWith('user_')).toBe(true)
+    expect(store.userId).toBe('')
   })
 
   it('adds a message', () => {
