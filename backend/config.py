@@ -36,11 +36,6 @@ AUTH_SECRET_KEY = os.getenv('AUTH_SECRET_KEY', '')
 AUTH_TOKEN_EXPIRY_HOURS = int(os.getenv('AUTH_TOKEN_EXPIRY_HOURS', '24'))
 AUTH_USERS_FILE = os.getenv('AUTH_USERS_FILE', './users.json')
 
-# Web Search Tool
-WEB_SEARCH_ENABLED = os.getenv('WEB_SEARCH_ENABLED', 'True') == 'True'
-WEB_SEARCH_MAX_RESULTS = int(os.getenv('WEB_SEARCH_MAX_RESULTS', '5'))
-WEB_SEARCH_TIMEOUT = int(os.getenv('WEB_SEARCH_TIMEOUT', '10'))
-
 # Default Config
 DEFAULT_CONFIG = {
     'model': AGENT_MODEL,
@@ -64,11 +59,5 @@ DEFAULT_CONFIG = {
         'max_messages_per_conversation': HISTORY_MAX_MESSAGES_PER_CONVERSATION,
         'redis_url': HISTORY_REDIS_URL,
         'redis_prefix': HISTORY_REDIS_PREFIX
-    },
-    'tools': {
-        'web_search': {
-            'enabled': WEB_SEARCH_ENABLED,
-            'max_results': WEB_SEARCH_MAX_RESULTS
-        }
     }
 }

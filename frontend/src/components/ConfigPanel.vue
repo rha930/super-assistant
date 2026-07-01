@@ -196,40 +196,6 @@
           </div>
         </div>
       </div>
-
-      <!-- Tools Section -->
-      <div>
-        <h3 class="text-sm font-semibold app-text mb-3">Tools</h3>
-        <div class="space-y-4">
-          <!-- Web Search Toggle -->
-          <div class="flex items-center justify-between">
-            <label class="text-xs font-medium app-text-muted" for="web-search-toggle">
-              Enable web search
-            </label>
-            <input
-              id="web-search-toggle"
-              v-model="config.tools.web_search.enabled"
-              type="checkbox"
-              class="w-4 h-4 rounded"
-            />
-          </div>
-
-          <!-- Max Results -->
-          <div v-if="config.tools.web_search.enabled">
-            <label class="block text-xs font-medium app-text-muted mb-1">
-              Max search results
-            </label>
-            <input
-              v-model.number="config.tools.web_search.max_results"
-              type="number"
-              min="1"
-              max="10"
-              class="w-full px-3 py-2 border app-border rounded-lg text-sm app-surface app-text"
-            />
-            <p class="text-xs app-text-muted mt-1">Number of web results to retrieve per search (1-10)</p>
-          </div>
-        </div>
-      </div>
     </div>
 
     <!-- Footer Buttons -->
@@ -284,12 +250,6 @@ const config = reactive({
   agent_config: {
     max_iterations: 10,
     timeout: 30
-  },
-  tools: {
-    web_search: {
-      enabled: true,
-      max_results: 5
-    }
   }
 })
 

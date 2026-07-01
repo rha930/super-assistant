@@ -24,29 +24,7 @@
         class="app-text mt-1 break-words markdown-content"
         v-html="renderedContent"
       ></div>
-      <!-- Web Search Sources -->
-      <div v-if="webSearchSources.length > 0" class="mt-2">
-        <button
-          @click="sourcesExpanded = !sourcesExpanded"
-          class="text-xs font-medium app-text-muted hover:app-text transition-colors flex items-center gap-1"
-        >
-          <span class="inline-block transition-transform" :class="{ 'rotate-90': sourcesExpanded }">▸</span>
-          Sources ({{ webSearchSources.length }})
-        </button>
-        <ul v-if="sourcesExpanded" class="mt-1 space-y-1 pl-4">
-          <li v-for="(source, idx) in webSearchSources" :key="idx" class="text-xs app-text-muted">
-            <a
-              :href="source.url"
-              target="_blank"
-              rel="noopener noreferrer"
-              class="hover:underline"
-              style="color: var(--color-accent);"
-            >{{ source.title }}</a>
-            <span class="opacity-60"> — {{ extractDomain(source.url) }}</span>
-          </li>
-        </ul>
-      </div>
-      <div v-if="message.metadata?.tool_calls && message.metadata.tool_calls.length > 0 && webSearchSources.length === 0" class="mt-2 text-xs app-text-muted">
+      <div v-if="message.metadata?.tool_calls && message.metadata.tool_calls.length > 0" class="mt-2 text-xs app-text-muted">
         <span class="font-semibold">Tool calls:</span> {{ message.metadata.tool_calls.length }}
       </div>
     </div>
@@ -54,7 +32,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, ref } from 'vue'
+import { computed } from 'vue'
 import type { Message as MessageType } from '../types/message'
 import { marked } from 'marked'
 import DOMPurify from 'dompurify'
@@ -64,7 +42,6 @@ interface Props {
 }
 
 const props = defineProps<Props>()
-const sourcesExpanded = ref(false)
 
 marked.setOptions({
   breaks: true,
@@ -76,20 +53,6 @@ const renderedContent = computed(() => {
   const html = marked.parse(raw)
   return DOMPurify.sanitize(html)
 })
-
-const webSearchSources = computed(() => {
-  const toolCalls = props.message.metadata?.tool_calls || []
-  const searchCall = toolCalls.find((tc: any) => tc.tool === 'web_search')
-  return searchCall?.sources || []
-})
-
-const extractDomain = (url: string): string => {
-  try {
-    return new URL(url).hostname.replace(/^www\./, '')
-  } catch {
-    return url
-  }
-}
 
 const formatTime = (timestamp: Date) => {
   return new Date(timestamp).toLocaleTimeString([], {

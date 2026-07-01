@@ -14,12 +14,6 @@ interface Config {
     max_iterations: number
     timeout: number
   }
-  tools: {
-    web_search: {
-      enabled: boolean
-      max_results: number
-    }
-  }
 }
 
 const DEFAULT_CONFIG: Config = {
@@ -33,12 +27,6 @@ const DEFAULT_CONFIG: Config = {
   agent_config: {
     max_iterations: 10,
     timeout: 30
-  },
-  tools: {
-    web_search: {
-      enabled: true,
-      max_results: 5
-    }
   }
 }
 

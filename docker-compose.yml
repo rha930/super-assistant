@@ -20,7 +20,6 @@ services:
       - AUTH_ENABLED=${AUTH_ENABLED:-True}
       - AUTH_SECRET_KEY=${AUTH_SECRET_KEY:-}
       - AUTH_USERS_FILE=/app/data/users.json
-      - WEB_SEARCH_ENABLED=${WEB_SEARCH_ENABLED:-True}
     volumes:
       - backend-data:/app/data
     extra_hosts:
@@ -66,3 +65,4 @@ services:
 volumes:
   backend-data:
   redis-data:
+ 
