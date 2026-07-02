@@ -1,5 +1,6 @@
 """Tests for provider selection (Ollama or Gemini)."""
 import pytest
+
 from services.chat_service import ChatService
 from services.config_service import ConfigService
 from services.gemini_service import GeminiService
