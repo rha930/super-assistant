@@ -1,9 +1,10 @@
-import re
 import logging
+import re
 
 from flask import Blueprint, request
-from models.response import SuccessResponse, ErrorResponse
+
 from middleware.auth import require_auth
+from models.response import ErrorResponse, SuccessResponse
 
 logger = logging.getLogger(__name__)
 auth_bp = Blueprint("auth", __name__, url_prefix="/api/auth")

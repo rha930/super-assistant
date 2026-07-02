@@ -1,8 +1,9 @@
 import { defineStore } from 'pinia'
-import { ref } from 'vue'
+import { ref, computed } from 'vue'
 import { api } from '../services/api'
 
 interface Config {
+  provider: 'ollama' | 'gemini'
   model: string
   model_parameters: {
     temperature: number
@@ -17,6 +18,7 @@ interface Config {
 }
 
 const DEFAULT_CONFIG: Config = {
+  provider: 'ollama',
   model: '',
   model_parameters: {
     temperature: 0.7,
@@ -35,6 +37,13 @@ export const useConfigStore = defineStore('config', () => {
   const availableModels = ref<string[]>([])
   const modelsLoading = ref(false)
   const modelsError = ref<string | null>(null)
+  const geminiModels = ref<string[]>([])
+  const geminiAvailable = ref(false)
+
+  // Model list for the currently selected provider.
+  const activeModels = computed<string[]>(() =>
+    config.value.provider === 'gemini' ? geminiModels.value : availableModels.value
+  )
 
   const getConfig = (): Config => {
     return config.value
@@ -54,6 +63,19 @@ export const useConfigStore = defineStore('config', () => {
       modelsLoading.value = false
     }
   }
+
+  const loadGeminiModels = async () => {
+    try {
+      const response = await api.get('/api/gemini/models')
+      geminiModels.value = response.data?.data?.models || []
+      geminiAvailable.value = Boolean(response.data?.data?.available)
+    } catch (error) {
+      geminiModels.value = []
+      geminiAvailable.value = false
+      console.error('Failed to load Gemini models:', error)
+    }
+  }
+
 
   const saveConfig = async (newConfig: Config) => {
     try {
@@ -83,8 +105,12 @@ export const useConfigStore = defineStore('config', () => {
     availableModels,
     modelsLoading,
     modelsError,
+    geminiModels,
+    geminiAvailable,
+    activeModels,
     getConfig,
     loadAvailableModels,
+    loadGeminiModels,
     saveConfig,
     loadConfig,
     resetConfig

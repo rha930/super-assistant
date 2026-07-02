@@ -1,7 +1,7 @@
+import json
 import re
 import uuid
-import json
-from typing import Any, Dict, List
+from typing import Any
 
 
 class GraphArtifactService:
@@ -17,7 +17,7 @@ class GraphArtifactService:
         ]
         return any(keyword in text for keyword in visualization_keywords)
 
-    def create_graph_artifacts(self, user_message: str, agent_response: str) -> List[Dict[str, Any]]:
+    def create_graph_artifacts(self, user_message: str, agent_response: str) -> list[dict[str, Any]]:
         """
         Attempt to build graph artifacts from the model response.
 
@@ -106,14 +106,14 @@ class GraphArtifactService:
             }
         ]
 
-    def _extract_points(self, text: str) -> List[Dict[str, Any]]:
+    def _extract_points(self, text: str) -> list[dict[str, Any]]:
         """
         Extract x/y points from common response formats, for example:
         - "Jan: 120"
         - "Q1 - 400"
         - "Product A = 32"
         """
-        points: List[Dict[str, Any]] = []
+        points: list[dict[str, Any]] = []
 
         patterns = [
             r'^\s*([A-Za-z0-9 _\-/\.]+)\s*[:=\-]\s*(-?\d+(?:\.\d+)?)\s*$',
@@ -139,7 +139,7 @@ class GraphArtifactService:
 
         return points
 
-    def _looks_like_series(self, points: List[Dict[str, Any]]) -> bool:
+    def _looks_like_series(self, points: list[dict[str, Any]]) -> bool:
         if len(points) < 3:
             return False
 
@@ -147,9 +147,9 @@ class GraphArtifactService:
         non_empty = [x for x in x_values if x]
         return len(non_empty) >= 3 and len(set(non_empty)) >= 2
 
-    def _extract_explicit_graph_artifacts(self, text: str) -> List[Dict[str, Any]]:
+    def _extract_explicit_graph_artifacts(self, text: str) -> list[dict[str, Any]]:
         """Extract graph artifacts when model returns structured JSON blocks."""
-        artifacts: List[Dict[str, Any]] = []
+        artifacts: list[dict[str, Any]] = []
 
         # Pattern A: fenced JSON blocks
         fenced_blocks = re.findall(r'```json\s*(\{[\s\S]*?\}|\[[\s\S]*?\])\s*```', text, flags=re.IGNORECASE)
@@ -163,7 +163,7 @@ class GraphArtifactService:
 
         # Deduplicate by graph id
         seen = set()
-        unique_artifacts: List[Dict[str, Any]] = []
+        unique_artifacts: list[dict[str, Any]] = []
         for artifact in artifacts:
             graph = artifact.get('graph', {}) if isinstance(artifact, dict) else {}
             graph_id = graph.get('id')
@@ -173,8 +173,8 @@ class GraphArtifactService:
 
         return unique_artifacts
 
-    def _parse_json_candidate(self, raw: str) -> List[Dict[str, Any]]:
-        results: List[Dict[str, Any]] = []
+    def _parse_json_candidate(self, raw: str) -> list[dict[str, Any]]:
+        results: list[dict[str, Any]] = []
         try:
             parsed = json.loads(raw)
         except Exception:
@@ -207,13 +207,13 @@ class GraphArtifactService:
 
         return results
 
-    def _extract_fallback_numeric_points(self, text: str) -> List[Dict[str, Any]]:
+    def _extract_fallback_numeric_points(self, text: str) -> list[dict[str, Any]]:
         """Fallback extractor that maps discovered numbers to indexed categories."""
         numeric_matches = re.findall(r'-?\d+(?:\.\d+)?', text)
         if len(numeric_matches) < 2:
             return []
 
-        points: List[Dict[str, Any]] = []
+        points: list[dict[str, Any]] = []
         for idx, raw in enumerate(numeric_matches[:20], start=1):
             try:
                 points.append({'x': f'Point {idx}', 'y': float(raw)})
@@ -236,7 +236,7 @@ class GraphArtifactService:
             return cleaned[:80]
         return f"Generated {chart_type.title()} Chart"
 
-    def _validate_graph(self, graph: Dict[str, Any]) -> bool:
+    def _validate_graph(self, graph: dict[str, Any]) -> bool:
         if not isinstance(graph.get('id'), str) or not graph['id'].strip():
             return False
         if not isinstance(graph.get('title'), str) or not graph['title'].strip():

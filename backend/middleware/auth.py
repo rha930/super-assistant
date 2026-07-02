@@ -1,7 +1,7 @@
 import functools
 import logging
 
-from flask import request, g, jsonify
+from flask import g, jsonify, request
 
 logger = logging.getLogger(__name__)
 

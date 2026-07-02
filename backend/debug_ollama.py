@@ -2,7 +2,7 @@
 """Debug script to test Ollama connectivity."""
 
 import os
-import sys
+
 import requests
 from dotenv import load_dotenv
 
@@ -11,7 +11,7 @@ load_dotenv()
 OLLAMA_BASE_URL = os.getenv('OLLAMA_BASE_URL', 'http://localhost:11434')
 OLLAMA_MODEL = os.getenv('OLLAMA_MODEL', 'gemma4')
 
-print(f"🔍 Debugging Ollama Connection\n")
+print("🔍 Debugging Ollama Connection\n")
 print(f"OLLAMA_BASE_URL: {OLLAMA_BASE_URL}")
 print(f"OLLAMA_MODEL: {OLLAMA_MODEL}")
 print()
@@ -55,7 +55,7 @@ if OLLAMA_MODEL:
         response.raise_for_status()
         data = response.json()
         response_text = data.get('response', '')[:100]
-        print(f"   ✅ Generation successful!")
+        print("   ✅ Generation successful!")
         print(f"   Response: {response_text}...")
     except Exception as e:
         print(f"   ❌ Generation failed: {e}")

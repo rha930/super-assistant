@@ -1,9 +1,11 @@
-from flask import Blueprint
-from models.response import SuccessResponse, ErrorResponse
 import logging
 import re
+
 import requests
+from flask import Blueprint
+
 from config import OLLAMA_BASE_URL, OLLAMA_MODEL
+from models.response import ErrorResponse, SuccessResponse
 
 logger = logging.getLogger(__name__)
 health_bp = Blueprint('health', __name__, url_prefix='/api')
@@ -32,7 +34,7 @@ def status():
     """Get service status including Ollama connection."""
     ollama_status = 'disconnected'
     ollama_model = None
-    
+
     try:
         response = requests.get(
             f"{OLLAMA_BASE_URL}/api/tags",
@@ -44,7 +46,7 @@ def status():
             ollama_model = next((m['name'] for m in models if m['name'] == OLLAMA_MODEL), None)
     except Exception as e:
         logger.warning(f"Could not connect to Ollama at {OLLAMA_BASE_URL}: {e}")
-    
+
     return SuccessResponse(
         data={
             'status': 'running',

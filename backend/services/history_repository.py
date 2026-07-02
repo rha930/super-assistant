@@ -1,4 +1,4 @@
-from typing import Any, Dict, List, Optional, Protocol
+from typing import Any, Protocol
 
 
 class ChatHistoryRepository(Protocol):
@@ -8,11 +8,11 @@ class ChatHistoryRepository(Protocol):
         conversation_id: str,
         role: str,
         content: str,
-        metadata: Optional[Dict[str, Any]] = None,
-    ) -> Dict[str, Any]:
+        metadata: dict[str, Any] | None = None,
+    ) -> dict[str, Any]:
         ...
 
-    def get_messages(self, user_id: str, conversation_id: str, limit: Optional[int] = None) -> List[Dict[str, Any]]:
+    def get_messages(self, user_id: str, conversation_id: str, limit: int | None = None) -> list[dict[str, Any]]:
         ...
 
     def delete_conversation(self, user_id: str, conversation_id: str) -> None:
@@ -21,5 +21,5 @@ class ChatHistoryRepository(Protocol):
     def delete_all_for_user(self, user_id: str) -> None:
         ...
 
-    def list_conversations(self, user_id: str, limit: int = 50) -> List[Dict[str, Any]]:
+    def list_conversations(self, user_id: str, limit: int = 50) -> list[dict[str, Any]]:
         ...
