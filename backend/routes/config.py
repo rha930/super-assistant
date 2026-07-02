@@ -1,7 +1,8 @@
-from flask import Blueprint, request, jsonify
-from services.config_service import get_config_service
-from models.response import SuccessResponse, ErrorResponse
 import logging
+
+from flask import Blueprint, request
+from models.response import ErrorResponse, SuccessResponse
+from services.config_service import get_config_service
 
 logger = logging.getLogger(__name__)
 config_bp = Blueprint('config', __name__, url_prefix='/api/config')
@@ -22,13 +23,13 @@ def update_config():
     """Update configuration."""
     try:
         data = request.get_json()
-        
+
         if not data:
             return ErrorResponse(message='Missing configuration data').to_dict(), 400
-        
+
         updated_config = config_service.update_config(data)
         return SuccessResponse(data=updated_config, message='Configuration updated').to_dict(), 200
-    
+
     except ValueError as e:
         logger.warning(f"Invalid configuration update: {e}")
         return ErrorResponse(message=str(e), code='INVALID_CONFIG').to_dict(), 400

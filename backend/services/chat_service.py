@@ -1,15 +1,17 @@
 import logging
 import uuid
-from typing import Optional, Dict, Any
+from typing import Any
+
 from config import GEMINI_API_KEY
 from models.message import Message
-from services.history_repository import ChatHistoryRepository
-from services.strands_agent import StrandsAgentService
-from services.gemini_service import GeminiService
+
 from services.config_service import get_config_service
+from services.gemini_service import GeminiService
 from services.graph_artifact_service import GraphArtifactService
+from services.history_repository import ChatHistoryRepository
 from services.history_repository_local import LocalChatHistoryRepository
 from services.history_repository_redis import RedisChatHistoryRepository
+from services.strands_agent import StrandsAgentService
 
 logger = logging.getLogger(__name__)
 
@@ -18,16 +20,16 @@ class ChatService:
     """Service for handling chat operations."""
 
     def __init__(self):
-        self.conversations: Dict[str, list] = {}
-        self.current_conversation_id: Optional[str] = None
+        self.conversations: dict[str, list] = {}
+        self.current_conversation_id: str | None = None
         self.agent = StrandsAgentService()
         self.graph_artifact_service = GraphArtifactService()
         self.config_service = get_config_service()
-        self.config: Dict[str, Any] = self.config_service.get_config()
+        self.config: dict[str, Any] = self.config_service.get_config()
         history_cfg = self.config.get("history_config", {})
         self.history_repo: ChatHistoryRepository = self._build_history_repo(history_cfg)
 
-    def _refresh_config(self) -> Dict[str, Any]:
+    def _refresh_config(self) -> dict[str, Any]:
         """Reload the latest shared configuration for this request."""
         self.config = self.config_service.get_config()
         return self.config
@@ -37,8 +39,8 @@ class ChatService:
         return GeminiService(self.config.get("gemini", {}), api_key=GEMINI_API_KEY)
 
     def _invoke_ollama(
-        self, message: str, history: list, context_cfg: Dict[str, Any]
-    ) -> Dict[str, Any]:
+        self, message: str, history: list, context_cfg: dict[str, Any]
+    ) -> dict[str, Any]:
         """Invoke the local Ollama agent and normalize the result metadata."""
         params = self.config.get("model_parameters", {})
         result = self.agent.invoke_agent(
@@ -64,7 +66,7 @@ class ChatService:
         self,
         message: str,
         history: list,
-        context_cfg: Dict[str, Any],
+        context_cfg: dict[str, Any],
         fallback: bool = False,
     ):
         """Yield Ollama stream events, tagging provider (and fallback) metadata."""
@@ -89,7 +91,7 @@ class ChatService:
             event["metadata"] = metadata
             yield event
 
-    def _build_history_repo(self, history_cfg: Dict[str, Any]) -> ChatHistoryRepository:
+    def _build_history_repo(self, history_cfg: dict[str, Any]) -> ChatHistoryRepository:
         backend_type = str(history_cfg.get("backend_type", "local")).strip().lower()
         max_messages = int(history_cfg.get("max_messages_per_conversation", 200))
 
@@ -122,9 +124,9 @@ class ChatService:
     def process_message(
         self,
         message: str,
-        conversation_id: Optional[str] = None,
+        conversation_id: str | None = None,
         user_id: str = "anonymous",
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """
         Process a user message and get a response from the Strands agent.
 
@@ -267,7 +269,7 @@ class ChatService:
     def start_conversation(
         self,
         message: str,
-        conversation_id: Optional[str] = None,
+        conversation_id: str | None = None,
         user_id: str = "anonymous",
     ) -> str:
         """Ensure conversation exists and append the user message."""
@@ -288,7 +290,7 @@ class ChatService:
     def stream_message(
         self,
         message: str,
-        conversation_id: Optional[str] = None,
+        conversation_id: str | None = None,
         user_id: str = "anonymous",
     ):
         """Yield response chunks from the model and keep conversation state."""
@@ -378,7 +380,7 @@ class ChatService:
         self,
         conversation_id: str,
         content: str,
-        metadata: Optional[Dict[str, Any]] = None,
+        metadata: dict[str, Any] | None = None,
         user_id: str = "anonymous",
     ):
         """Persist final streamed assistant message to history."""

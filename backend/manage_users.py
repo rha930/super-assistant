@@ -5,8 +5,8 @@ import argparse
 import getpass
 import sys
 
+from config import AUTH_SECRET_KEY, AUTH_USERS_FILE
 from services.auth_service import AuthService
-from config import AUTH_USERS_FILE, AUTH_SECRET_KEY
 
 
 def get_auth_service() -> AuthService:

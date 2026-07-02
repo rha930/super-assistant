@@ -1,9 +1,10 @@
-from flask import Blueprint
-from services.gemini_service import GeminiService
-from services.config_service import get_config_service
-from models.response import SuccessResponse
-from config import GEMINI_API_KEY
 import logging
+
+from config import GEMINI_API_KEY
+from flask import Blueprint
+from models.response import SuccessResponse
+from services.config_service import get_config_service
+from services.gemini_service import GeminiService
 
 logger = logging.getLogger(__name__)
 gemini_bp = Blueprint('gemini', __name__, url_prefix='/api/gemini')

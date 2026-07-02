@@ -1,8 +1,10 @@
-import logging
-from typing import Dict, Any
-from config import DEFAULT_CONFIG, AGENT_MODEL, OLLAMA_MODEL, GEMINI_API_KEY
-from services.gemini_service import GeminiService
 import copy
+import logging
+from typing import Any
+
+from config import AGENT_MODEL, DEFAULT_CONFIG, GEMINI_API_KEY, OLLAMA_MODEL
+
+from services.gemini_service import GeminiService
 
 logger = logging.getLogger(__name__)
 
@@ -18,7 +20,7 @@ class ConfigService:
         gemini = GeminiService(self.config.get("gemini", {}), api_key=GEMINI_API_KEY)
         return gemini.is_available()
 
-    def get_config(self) -> Dict[str, Any]:
+    def get_config(self) -> dict[str, Any]:
         """Get current configuration."""
         resolved = copy.deepcopy(self.config)
         resolved["provider"] = (resolved.get("provider") or "ollama").strip().lower()
@@ -27,7 +29,7 @@ class ConfigService:
             resolved["model"] = (AGENT_MODEL or OLLAMA_MODEL or "").strip()
         return resolved
 
-    def update_config(self, new_config: Dict[str, Any]) -> Dict[str, Any]:
+    def update_config(self, new_config: dict[str, Any]) -> dict[str, Any]:
         """
         Update configuration.
 
@@ -93,7 +95,7 @@ class ConfigService:
             logger.error(f"Error updating configuration: {e}")
             raise
 
-    def reset_config(self) -> Dict[str, Any]:
+    def reset_config(self) -> dict[str, Any]:
         """Reset configuration to defaults."""
         self.config = copy.deepcopy(DEFAULT_CONFIG)
         logger.info("Configuration reset to defaults")

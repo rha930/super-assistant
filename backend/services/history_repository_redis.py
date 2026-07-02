@@ -2,7 +2,7 @@ import json
 import logging
 import uuid
 from datetime import datetime, timezone
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 import redis
 
@@ -31,8 +31,8 @@ class RedisChatHistoryRepository:
         conversation_id: str,
         role: str,
         content: str,
-        metadata: Optional[Dict[str, Any]] = None,
-    ) -> Dict[str, Any]:
+        metadata: dict[str, Any] | None = None,
+    ) -> dict[str, Any]:
         timestamp = datetime.now(timezone.utc).isoformat()
         message = {
             'id': f"msg_{uuid.uuid4().hex}",
@@ -55,13 +55,13 @@ class RedisChatHistoryRepository:
 
         return message
 
-    def get_messages(self, user_id: str, conversation_id: str, limit: Optional[int] = None) -> List[Dict[str, Any]]:
+    def get_messages(self, user_id: str, conversation_id: str, limit: int | None = None) -> list[dict[str, Any]]:
         key = self._messages_key(user_id, conversation_id)
         raw_items = self.client.zrange(key, 0, -1)
         if limit is not None and limit > 0:
             raw_items = raw_items[-limit:]
 
-        messages: List[Dict[str, Any]] = []
+        messages: list[dict[str, Any]] = []
         for item in raw_items:
             try:
                 messages.append(json.loads(item))
@@ -78,9 +78,9 @@ class RedisChatHistoryRepository:
         if keys:
             self.client.delete(*keys)
 
-    def list_conversations(self, user_id: str, limit: int = 50) -> List[Dict[str, Any]]:
+    def list_conversations(self, user_id: str, limit: int = 50) -> list[dict[str, Any]]:
         pattern = f"{self.redis_prefix}:{user_id}:*:messages"
-        results: List[Dict[str, Any]] = []
+        results: list[dict[str, Any]] = []
 
         for key in self.client.scan_iter(match=pattern):
             key_str = str(key)

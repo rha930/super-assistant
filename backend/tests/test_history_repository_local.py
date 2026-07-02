@@ -1,8 +1,6 @@
 import os
-import tempfile
 
 import pytest
-
 from services.history_repository_local import LocalChatHistoryRepository
 
 

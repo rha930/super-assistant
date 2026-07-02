@@ -1,9 +1,10 @@
-from flask import Blueprint, request, Response, stream_with_context, g
-from services.chat_service import ChatService
 import json
-from models.response import SuccessResponse, ErrorResponse
-from middleware.auth import require_auth
 import logging
+
+from flask import Blueprint, Response, g, request, stream_with_context
+from middleware.auth import require_auth
+from models.response import ErrorResponse, SuccessResponse
+from services.chat_service import ChatService
 
 logger = logging.getLogger(__name__)
 chat_bp = Blueprint('chat', __name__, url_prefix='/api/chat')
@@ -19,7 +20,7 @@ def _get_user_id() -> str:
 def send_message():
     """
     Send a message to the Strands agent.
-    
+
     Expected JSON:
     {
         "message": "user message",
@@ -28,14 +29,14 @@ def send_message():
     """
     try:
         data = request.get_json()
-        
+
         if not data or 'message' not in data:
             return ErrorResponse(message='Missing required field: message').to_dict(), 400
-        
+
         message = data['message']
         conversation_id = data.get('conversation_id')
         user_id = _get_user_id()
-        
+
         try:
             response = chat_service.process_message(message, conversation_id, user_id=user_id)
             return SuccessResponse(data=response).to_dict(), 200
@@ -50,7 +51,7 @@ def send_message():
         except Exception as e:
             logger.error(f"Error in send_message: {e}")
             return ErrorResponse(message=str(e)).to_dict(), 500
-    
+
     except Exception as e:
         logger.error(f"Unexpected error in send_message: {e}")
         return ErrorResponse(message='An unexpected error occurred').to_dict(), 500

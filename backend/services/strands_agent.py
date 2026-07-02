@@ -1,8 +1,10 @@
-import logging
-from typing import Dict, Any, Optional, Generator
-import requests
-import os
 import json
+import logging
+import os
+from collections.abc import Generator
+from typing import Any
+
+import requests
 
 logger = logging.getLogger(__name__)
 
@@ -16,11 +18,11 @@ except ImportError:
 
 class StrandsAgentService:
     """Service for interacting with a localhosted Ollama model."""
-    
-    def __init__(self, base_url: Optional[str] = None, model: Optional[str] = None):
+
+    def __init__(self, base_url: str | None = None, model: str | None = None):
         """
         Initialize the local Ollama service client.
-        
+
         Args:
             base_url: Ollama server base URL (defaults to OLLAMA_BASE_URL env or config)
             model: Default model name (defaults to OLLAMA_MODEL env or config)
@@ -69,8 +71,8 @@ class StrandsAgentService:
     def _build_prompt(
         self,
         user_message: str,
-        system_prompt: Optional[str] = None,
-        conversation_history: Optional[list] = None,
+        system_prompt: str | None = None,
+        conversation_history: list | None = None,
         max_messages: int = 12,
         max_input_chars: int = 12000
     ) -> str:
@@ -111,10 +113,10 @@ class StrandsAgentService:
     def stream_agent(
         self,
         user_message: str,
-        system_prompt: Optional[str] = None,
-        conversation_history: Optional[list] = None,
+        system_prompt: str | None = None,
+        conversation_history: list | None = None,
         **kwargs
-    ) -> Generator[Dict[str, Any], None, None]:
+    ) -> Generator[dict[str, Any], None, None]:
         """Stream response chunks from Ollama /api/generate."""
         try:
             model = kwargs.get('model', self.model)
@@ -189,31 +191,31 @@ class StrandsAgentService:
         except Exception as e:
             logger.error("Error invoking Ollama model at %s: %s", self.base_url, e)
             raise
-    
+
     def invoke_agent(
         self,
-        agent_id: Optional[str],
-        session_id: Optional[str],
+        agent_id: str | None,
+        session_id: str | None,
         user_message: str,
-        system_prompt: Optional[str] = None,
-        conversation_history: Optional[list] = None,
+        system_prompt: str | None = None,
+        conversation_history: list | None = None,
         **kwargs
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """
         Invoke the Strands agent with a user message.
-        
+
         Args:
             agent_id: Unused placeholder for compatibility
             session_id: Unused placeholder for compatibility
             user_message: User input message
             system_prompt: Optional system prompt override
             **kwargs: Additional generation parameters (temperature, top_p, max_tokens, model)
-        
+
         Returns:
             Agent response and metadata
         """
         full_text = ''
-        metadata: Dict[str, Any] = {'tool_calls': []}
+        metadata: dict[str, Any] = {'tool_calls': []}
 
         for event in self.stream_agent(
             user_message=user_message,

@@ -1,5 +1,6 @@
 import logging
-from typing import Dict, Any, Optional, Generator, List
+from collections.abc import Generator
+from typing import Any
 
 import requests
 
@@ -14,7 +15,7 @@ class GeminiService:
     The API key is supplied from the environment and is never logged or returned.
     """
 
-    def __init__(self, config: Optional[Dict[str, Any]] = None, api_key: str = ''):
+    def __init__(self, config: dict[str, Any] | None = None, api_key: str = ''):
         config = config or {}
         self.enabled = bool(config.get('enabled', False))
         self.api_key = api_key or ''
@@ -22,7 +23,7 @@ class GeminiService:
         self.base_url = str(config.get('base_url', 'https://generativelanguage.googleapis.com/v1beta')).rstrip('/')
         self.timeout_seconds = int(config.get('timeout_seconds', 60))
         self.max_output_tokens = int(config.get('max_output_tokens', 2048))
-        self.models: List[str] = list(config.get('models', []) or [])
+        self.models: list[str] = list(config.get('models', []) or [])
         logger.info(
             "Gemini service initialized (enabled=%s, model=%s, models=%s)",
             self.enabled, self.model, self.models,
@@ -32,7 +33,7 @@ class GeminiService:
         """Return True when Gemini is enabled and an API key is configured."""
         return bool(self.enabled and self.api_key)
 
-    def available_models(self) -> List[str]:
+    def available_models(self) -> list[str]:
         """Return the allow-list of selectable Gemini models (empty if disabled)."""
         if not self.is_available():
             return []
@@ -41,10 +42,10 @@ class GeminiService:
     def _build_contents(
         self,
         user_message: str,
-        conversation_history: Optional[list] = None,
-    ) -> List[Dict[str, Any]]:
+        conversation_history: list | None = None,
+    ) -> list[dict[str, Any]]:
         """Map conversation history + the new message to Gemini `contents`."""
-        contents: List[Dict[str, Any]] = []
+        contents: list[dict[str, Any]] = []
         for item in conversation_history or []:
             role = str(item.get('role', '')).strip().lower()
             text = str(item.get('content', '')).strip()
@@ -59,10 +60,10 @@ class GeminiService:
     def generate(
         self,
         user_message: str,
-        system_prompt: Optional[str] = None,
-        conversation_history: Optional[list] = None,
+        system_prompt: str | None = None,
+        conversation_history: list | None = None,
         **kwargs,
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """Call the Gemini generateContent endpoint and return the full result.
 
         Returns: { 'content': str, 'model': str, 'provider': 'gemini',
@@ -75,7 +76,7 @@ class GeminiService:
         model = kwargs.get('model') or self.model
         url = f"{self.base_url}/models/{model}:generateContent"
 
-        payload: Dict[str, Any] = {
+        payload: dict[str, Any] = {
             'contents': self._build_contents(user_message, conversation_history),
             'generationConfig': {
                 'temperature': kwargs.get('temperature', 0.7),
@@ -130,10 +131,10 @@ class GeminiService:
     def stream_generate(
         self,
         user_message: str,
-        system_prompt: Optional[str] = None,
-        conversation_history: Optional[list] = None,
+        system_prompt: str | None = None,
+        conversation_history: list | None = None,
         **kwargs,
-    ) -> Generator[Dict[str, Any], None, None]:
+    ) -> Generator[dict[str, Any], None, None]:
         """Yield chunk events compatible with StrandsAgentService.stream_agent.
 
         Phase 1 performs a single non-streamed request and emits the full text
@@ -192,7 +193,7 @@ class GeminiService:
         return text[:200] if text else 'unknown error'
 
     @staticmethod
-    def _extract_text(data: Dict[str, Any]) -> str:
+    def _extract_text(data: dict[str, Any]) -> str:
         candidates = data.get('candidates') or []
         if not candidates:
             return ''
@@ -200,7 +201,7 @@ class GeminiService:
         return ''.join(part.get('text', '') for part in parts).strip()
 
     @staticmethod
-    def _extract_usage(data: Dict[str, Any]) -> Optional[Dict[str, int]]:
+    def _extract_usage(data: dict[str, Any]) -> dict[str, int] | None:
         meta = data.get('usageMetadata')
         if not meta:
             return None

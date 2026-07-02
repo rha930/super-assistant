@@ -1,5 +1,6 @@
 import os
 from pathlib import Path
+
 from dotenv import load_dotenv
 
 # Load the canonical project-root .env first (matches docker-compose), then allow
