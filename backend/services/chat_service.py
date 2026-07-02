@@ -166,10 +166,14 @@ class ChatService:
                             'usage': result.get('usage'),
                         },
                     }
-                except Exception as e:
-                    logger.error('Gemini generation failed, falling back to Ollama: %s', e)
-                    agent_result = self._invoke_ollama(message, history, context_cfg)
-                    agent_result['metadata']['fallback_from'] = 'gemini'
+                except Exception as gemini_err:
+                    logger.error('Gemini generation failed, falling back to Ollama: %s', gemini_err)
+                    try:
+                        agent_result = self._invoke_ollama(message, history, context_cfg)
+                        agent_result['metadata']['fallback_from'] = 'gemini'
+                    except Exception:
+                        logger.error('Ollama fallback also failed; re-raising original Gemini error')
+                        raise RuntimeError(f'Gemini error: {gemini_err}') from gemini_err
             else:
                 if provider == 'gemini':
                     logger.warning(
@@ -271,9 +275,13 @@ class ChatService:
                     )
                     # Materialize so a failure surfaces before we start yielding.
                     stream = list(stream)
-                except Exception as e:
-                    logger.error('Gemini stream failed, falling back to Ollama: %s', e)
-                    stream = self._ollama_stream(message, history, context_cfg, fallback=True)
+                except Exception as gemini_err:
+                    logger.error('Gemini stream failed, falling back to Ollama: %s', gemini_err)
+                    try:
+                        stream = list(self._ollama_stream(message, history, context_cfg, fallback=True))
+                    except Exception:
+                        logger.error('Ollama fallback also failed; re-raising original Gemini error')
+                        raise RuntimeError(f'Gemini error: {gemini_err}') from gemini_err
             else:
                 if provider == 'gemini':
                     logger.warning(
