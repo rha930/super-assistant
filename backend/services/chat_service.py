@@ -1,10 +1,12 @@
 import logging
 import uuid
 from typing import Optional, Dict, Any
-from config import DEFAULT_CONFIG
+from config import GEMINI_API_KEY
 from models.message import Message
 from services.history_repository import ChatHistoryRepository
 from services.strands_agent import StrandsAgentService
+from services.gemini_service import GeminiService
+from services.config_service import get_config_service
 from services.graph_artifact_service import GraphArtifactService
 from services.history_repository_local import LocalChatHistoryRepository
 from services.history_repository_redis import RedisChatHistoryRepository
@@ -19,9 +21,67 @@ class ChatService:
         self.current_conversation_id: Optional[str] = None
         self.agent = StrandsAgentService()
         self.graph_artifact_service = GraphArtifactService()
-        self.config: Dict[str, Any] = DEFAULT_CONFIG.copy()
+        self.config_service = get_config_service()
+        self.config: Dict[str, Any] = self.config_service.get_config()
         history_cfg = self.config.get('history_config', {})
         self.history_repo: ChatHistoryRepository = self._build_history_repo(history_cfg)
+
+    def _refresh_config(self) -> Dict[str, Any]:
+        """Reload the latest shared configuration for this request."""
+        self.config = self.config_service.get_config()
+        return self.config
+
+    def _build_gemini_service(self) -> GeminiService:
+        """Construct a GeminiService from the current config + env API key."""
+        return GeminiService(self.config.get('gemini', {}), api_key=GEMINI_API_KEY)
+
+    def _invoke_ollama(self, message: str, history: list, context_cfg: Dict[str, Any]) -> Dict[str, Any]:
+        """Invoke the local Ollama agent and normalize the result metadata."""
+        params = self.config.get('model_parameters', {})
+        result = self.agent.invoke_agent(
+            agent_id=None,
+            session_id=self.current_conversation_id,
+            user_message=message,
+            system_prompt=self.config.get('system_prompt'),
+            conversation_history=history,
+            model=self.config.get('model'),
+            temperature=params.get('temperature', 0.7),
+            top_p=params.get('top_p', 0.9),
+            max_tokens=params.get('max_tokens', 1000),
+            context_max_messages=context_cfg.get('max_messages', 12),
+            context_max_input_chars=context_cfg.get('max_input_chars', 12000),
+        )
+        metadata = result.get('metadata', {}) or {}
+        metadata.setdefault('provider', 'ollama')
+        metadata.setdefault('model', self.config.get('model'))
+        result['metadata'] = metadata
+        return result
+
+    def _ollama_stream(self, message: str, history: list, context_cfg: Dict[str, Any], fallback: bool = False):
+        """Yield Ollama stream events, tagging provider (and fallback) metadata."""
+        params = self.config.get('model_parameters', {})
+        model = self.config.get('model')
+        for event in self.agent.stream_agent(
+            user_message=message,
+            system_prompt=self.config.get('system_prompt'),
+            conversation_history=history,
+            model=model,
+            temperature=params.get('temperature', 0.7),
+            top_p=params.get('top_p', 0.9),
+            max_tokens=params.get('max_tokens', 1000),
+            context_max_messages=context_cfg.get('max_messages', 12),
+            context_max_input_chars=context_cfg.get('max_input_chars', 12000),
+        ):
+            metadata = event.get('metadata', {}) or {}
+            metadata.setdefault('provider', 'ollama')
+            metadata.setdefault('model', model)
+            if fallback:
+                metadata['fallback_from'] = 'gemini'
+            event['metadata'] = metadata
+            yield event
+
+
+
 
     def _build_history_repo(self, history_cfg: Dict[str, Any]) -> ChatHistoryRepository:
         backend_type = str(history_cfg.get('backend_type', 'local')).strip().lower()
@@ -58,6 +118,8 @@ class ChatService:
             Dictionary with agent response and metadata
         """
         try:
+            self._refresh_config()
+
             # Use existing or create new conversation ID
             if not conversation_id:
                 conversation_id = f"conv_{uuid.uuid4().hex}"
@@ -78,23 +140,46 @@ class ChatService:
             history = self._build_context_history(user_id, conversation_id)
             context_cfg = self.config.get('context_config', {})
 
-            agent_result = self.agent.invoke_agent(
-                agent_id=None,
-                session_id=conversation_id,
-                user_message=message,
-                system_prompt=self.config.get('system_prompt'),
-                conversation_history=history,
-                model=self.config.get('model'),
-                temperature=self.config.get('model_parameters', {}).get('temperature', 0.7),
-                top_p=self.config.get('model_parameters', {}).get('top_p', 0.9),
-                max_tokens=self.config.get('model_parameters', {}).get('max_tokens', 1000),
-                context_max_messages=context_cfg.get('max_messages', 12),
-                context_max_input_chars=context_cfg.get('max_input_chars', 12000)
-            )
-            agent_response = agent_result.get('response', '')
+            provider = (self.config.get('provider') or 'ollama').strip().lower()
+            gemini = self._build_gemini_service()
+            params = self.config.get('model_parameters', {})
 
+            if provider == 'gemini' and gemini.is_available():
+                logger.info("Routing generation to Gemini (model=%s)", self.config.get('gemini', {}).get('model'))
+                try:
+                    result = gemini.generate(
+                        user_message=message,
+                        system_prompt=self.config.get('system_prompt'),
+                        conversation_history=history,
+                        model=self.config.get('gemini', {}).get('model'),
+                        temperature=params.get('temperature', 0.7),
+                        top_p=params.get('top_p', 0.9),
+                        max_tokens=params.get('max_tokens', 1000),
+                    )
+                    agent_response = result.get('content', '')
+                    agent_result = {
+                        'response': agent_response,
+                        'metadata': {
+                            'provider': 'gemini',
+                            'model': result.get('model'),
+                            'tool_calls': [],
+                            'usage': result.get('usage'),
+                        },
+                    }
+                except Exception as e:
+                    logger.error('Gemini generation failed, falling back to Ollama: %s', e)
+                    agent_result = self._invoke_ollama(message, history, context_cfg)
+                    agent_result['metadata']['fallback_from'] = 'gemini'
+            else:
+                if provider == 'gemini':
+                    logger.warning(
+                        "Provider is 'gemini' but it is unavailable (enabled/API key missing); using Ollama"
+                    )
+                agent_result = self._invoke_ollama(message, history, context_cfg)
+
+            agent_response = agent_result.get('response', '')
             agent_tool_calls = agent_result.get('metadata', {}).get('tool_calls', [])
-            
+
             # Only generate graph artifacts if user message indicates visualization intent
             artifacts = []
             if self.agent._wants_visualization(message):
@@ -163,21 +248,38 @@ class ChatService:
     def stream_message(self, message: str, conversation_id: Optional[str] = None, user_id: str = 'anonymous'):
         """Yield response chunks from the model and keep conversation state."""
         try:
+            self._refresh_config()
             cid = self.start_conversation(message, conversation_id, user_id)
             history = self._build_context_history(user_id, cid)
             context_cfg = self.config.get('context_config', {})
+            params = self.config.get('model_parameters', {})
 
-            stream = self.agent.stream_agent(
-                user_message=message,
-                system_prompt=self.config.get('system_prompt'),
-                conversation_history=history,
-                model=self.config.get('model'),
-                temperature=self.config.get('model_parameters', {}).get('temperature', 0.7),
-                top_p=self.config.get('model_parameters', {}).get('top_p', 0.9),
-                max_tokens=self.config.get('model_parameters', {}).get('max_tokens', 1000),
-                context_max_messages=context_cfg.get('max_messages', 12),
-                context_max_input_chars=context_cfg.get('max_input_chars', 12000)
-            )
+            provider = (self.config.get('provider') or 'ollama').strip().lower()
+            gemini = self._build_gemini_service()
+
+            if provider == 'gemini' and gemini.is_available():
+                logger.info("Routing streaming generation to Gemini (model=%s)", self.config.get('gemini', {}).get('model'))
+                try:
+                    stream = gemini.stream_generate(
+                        user_message=message,
+                        system_prompt=self.config.get('system_prompt'),
+                        conversation_history=history,
+                        model=self.config.get('gemini', {}).get('model'),
+                        temperature=params.get('temperature', 0.7),
+                        top_p=params.get('top_p', 0.9),
+                        max_tokens=params.get('max_tokens', 1000),
+                    )
+                    # Materialize so a failure surfaces before we start yielding.
+                    stream = list(stream)
+                except Exception as e:
+                    logger.error('Gemini stream failed, falling back to Ollama: %s', e)
+                    stream = self._ollama_stream(message, history, context_cfg, fallback=True)
+            else:
+                if provider == 'gemini':
+                    logger.warning(
+                        "Provider is 'gemini' but it is unavailable (enabled/API key missing); using Ollama"
+                    )
+                stream = self._ollama_stream(message, history, context_cfg)
 
             for event in stream:
                 metadata = event.get('metadata', {'tool_calls': []})

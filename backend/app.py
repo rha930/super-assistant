@@ -42,11 +42,13 @@ def create_app():
     from routes.chat import chat_bp
     from routes.config import config_bp
     from routes.health import health_bp
+    from routes.gemini import gemini_bp
 
     app.register_blueprint(auth_bp)
     app.register_blueprint(chat_bp)
     app.register_blueprint(config_bp)
     app.register_blueprint(health_bp)
+    app.register_blueprint(gemini_bp)
     
     @app.before_request
     def before_request():

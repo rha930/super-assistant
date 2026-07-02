@@ -1,6 +1,7 @@
 import logging
 from typing import Dict, Any
-from config import DEFAULT_CONFIG, AGENT_MODEL, OLLAMA_MODEL
+from config import DEFAULT_CONFIG, AGENT_MODEL, OLLAMA_MODEL, GEMINI_API_KEY
+from services.gemini_service import GeminiService
 import copy
 
 logger = logging.getLogger(__name__)
@@ -10,10 +11,16 @@ class ConfigService:
     
     def __init__(self):
         self.config = copy.deepcopy(DEFAULT_CONFIG)
+
+    def _gemini_available(self) -> bool:
+        """Whether the Gemini provider can currently be selected."""
+        gemini = GeminiService(self.config.get('gemini', {}), api_key=GEMINI_API_KEY)
+        return gemini.is_available()
     
     def get_config(self) -> Dict[str, Any]:
         """Get current configuration."""
         resolved = copy.deepcopy(self.config)
+        resolved['provider'] = (resolved.get('provider') or 'ollama').strip().lower()
         model = (resolved.get('model') or '').strip()
         if not model:
             resolved['model'] = (AGENT_MODEL or OLLAMA_MODEL or '').strip()
@@ -30,6 +37,15 @@ class ConfigService:
             Updated configuration
         """
         try:
+            # Update provider selection (allow-list only)
+            if 'provider' in new_config:
+                provider = str(new_config.get('provider') or 'ollama').strip().lower()
+                if provider not in ('ollama', 'gemini'):
+                    raise ValueError(f"Invalid provider '{provider}'. Must be 'ollama' or 'gemini'.")
+                if provider == 'gemini' and not self._gemini_available():
+                    raise ValueError('Gemini provider is not available. Configure GEMINI_ENABLED and GEMINI_API_KEY.')
+                self.config['provider'] = provider
+
             # Update active model
             if 'model' in new_config:
                 model = str(new_config.get('model') or '').strip()
@@ -72,3 +88,18 @@ class ConfigService:
         self.config = copy.deepcopy(DEFAULT_CONFIG)
         logger.info("Configuration reset to defaults")
         return copy.deepcopy(self.config)
+
+
+_config_service_instance: 'ConfigService | None' = None
+
+
+def get_config_service() -> 'ConfigService':
+    """Return the shared ConfigService singleton.
+
+    Both the config routes and the ChatService use this so configuration
+    changes (provider, model, etc.) take effect on subsequent chats.
+    """
+    global _config_service_instance
+    if _config_service_instance is None:
+        _config_service_instance = ConfigService()
+    return _config_service_instance
