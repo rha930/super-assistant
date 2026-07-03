@@ -5,11 +5,9 @@ from flask import Flask, request
 from flask_cors import CORS
 
 # Configure logging
-logging.basicConfig(
-    level=logging.INFO,
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
-)
+logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s")
 logger = logging.getLogger(__name__)
+
 
 def create_app():
     """Create and configure the Flask application."""
@@ -27,7 +25,7 @@ def create_app():
     secret_key = AUTH_SECRET_KEY
     if not secret_key:
         secret_key = secrets.token_hex(32)
-        logger.warning('AUTH_SECRET_KEY not set — generated ephemeral key (will not persist across restarts)')
+        logger.warning("AUTH_SECRET_KEY not set — generated ephemeral key (will not persist across restarts)")
 
     auth_service = AuthService(
         users_file=AUTH_USERS_FILE,
@@ -36,7 +34,7 @@ def create_app():
     )
     init_auth(auth_service, enabled=AUTH_ENABLED)
     init_auth_routes(auth_service)
-    logger.info('Auth enabled=%s  users_file=%s', AUTH_ENABLED, AUTH_USERS_FILE)
+    logger.info("Auth enabled=%s  users_file=%s", AUTH_ENABLED, AUTH_USERS_FILE)
 
     # Register blueprints
     from routes.chat import chat_bp
@@ -56,15 +54,16 @@ def create_app():
 
     @app.errorhandler(404)
     def not_found(error):
-        return {'error': 'Not found'}, 404
+        return {"error": "Not found"}, 404
 
     @app.errorhandler(500)
     def internal_error(error):
         logger.error(f"Internal error: {error}")
-        return {'error': 'Internal server error'}, 500
+        return {"error": "Internal server error"}, 500
 
     return app
 
-if __name__ == '__main__':
+
+if __name__ == "__main__":
     app = create_app()
-    app.run(debug=True, host='0.0.0.0', port=5000)
+    app.run(debug=True, host="0.0.0.0", port=5000)

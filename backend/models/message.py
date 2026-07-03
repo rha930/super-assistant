@@ -6,6 +6,7 @@ from pydantic import BaseModel, Field
 
 class Message(BaseModel):
     """Message model."""
+
     role: str  # 'user' or 'agent'
     content: str
     timestamp: datetime = Field(default_factory=datetime.now)
@@ -13,8 +14,8 @@ class Message(BaseModel):
 
     def to_dict(self) -> dict[str, Any]:
         return {
-            'role': self.role,
-            'content': self.content,
-            'timestamp': self.timestamp.isoformat(),
-            'metadata': self.metadata
+            "role": self.role,
+            "content": self.content,
+            "timestamp": self.timestamp.isoformat(),
+            "metadata": self.metadata,
         }

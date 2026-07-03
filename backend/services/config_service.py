@@ -3,7 +3,6 @@ import logging
 from typing import Any
 
 from config import AGENT_MODEL, DEFAULT_CONFIG, GEMINI_API_KEY, OLLAMA_MODEL
-
 from services.gemini_service import GeminiService
 
 logger = logging.getLogger(__name__)
@@ -44,13 +43,9 @@ class ConfigService:
             if "provider" in new_config:
                 provider = str(new_config.get("provider") or "ollama").strip().lower()
                 if provider not in ("ollama", "gemini"):
-                    raise ValueError(
-                        f"Invalid provider '{provider}'. Must be 'ollama' or 'gemini'."
-                    )
+                    raise ValueError(f"Invalid provider '{provider}'. Must be 'ollama' or 'gemini'.")
                 if provider == "gemini" and not self._gemini_available():
-                    raise ValueError(
-                        "Gemini provider is not available. Configure GEMINI_ENABLED and GEMINI_API_KEY."
-                    )
+                    raise ValueError("Gemini provider is not available. Configure GEMINI_ENABLED and GEMINI_API_KEY.")
                 self.config["provider"] = provider
 
             # Update active model

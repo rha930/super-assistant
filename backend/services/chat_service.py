@@ -4,7 +4,6 @@ from typing import Any
 
 from config import GEMINI_API_KEY
 from models.message import Message
-
 from services.config_service import get_config_service
 from services.gemini_service import GeminiService
 from services.graph_artifact_service import GraphArtifactService
@@ -38,9 +37,7 @@ class ChatService:
         """Construct a GeminiService from the current config + env API key."""
         return GeminiService(self.config.get("gemini", {}), api_key=GEMINI_API_KEY)
 
-    def _invoke_ollama(
-        self, message: str, history: list, context_cfg: dict[str, Any]
-    ) -> dict[str, Any]:
+    def _invoke_ollama(self, message: str, history: list, context_cfg: dict[str, Any]) -> dict[str, Any]:
         """Invoke the local Ollama agent and normalize the result metadata."""
         params = self.config.get("model_parameters", {})
         result = self.agent.invoke_agent(
@@ -96,12 +93,8 @@ class ChatService:
         max_messages = int(history_cfg.get("max_messages_per_conversation", 200))
 
         if backend_type == "redis":
-            redis_url = str(
-                history_cfg.get("redis_url", "redis://localhost:6379/0")
-            ).strip()
-            redis_prefix = (
-                str(history_cfg.get("redis_prefix", "chat")).strip() or "chat"
-            )
+            redis_url = str(history_cfg.get("redis_url", "redis://localhost:6379/0")).strip()
+            redis_prefix = str(history_cfg.get("redis_prefix", "chat")).strip() or "chat"
             try:
                 logger.info("Using Redis chat history backend")
                 return RedisChatHistoryRepository(
@@ -192,22 +185,14 @@ class ChatService:
                         gemini_err,
                     )
                     try:
-                        agent_result = self._invoke_ollama(
-                            message, history, context_cfg
-                        )
+                        agent_result = self._invoke_ollama(message, history, context_cfg)
                         agent_result["metadata"]["fallback_from"] = "gemini"
                     except Exception:
-                        logger.error(
-                            "Ollama fallback also failed; re-raising original Gemini error"
-                        )
-                        raise RuntimeError(
-                            f"Gemini error: {gemini_err}"
-                        ) from gemini_err
+                        logger.error("Ollama fallback also failed; re-raising original Gemini error")
+                        raise RuntimeError(f"Gemini error: {gemini_err}") from gemini_err
             else:
                 if provider == "gemini":
-                    logger.warning(
-                        "Provider is 'gemini' but it is unavailable (enabled/API key missing); using Ollama"
-                    )
+                    logger.warning("Provider is 'gemini' but it is unavailable (enabled/API key missing); using Ollama")
                 agent_result = self._invoke_ollama(message, history, context_cfg)
 
             agent_response = agent_result.get("response", "")
@@ -216,9 +201,7 @@ class ChatService:
             # Only generate graph artifacts if user message indicates visualization intent
             artifacts = []
             if self.agent._wants_visualization(message):
-                artifacts = self.graph_artifact_service.create_graph_artifacts(
-                    message, agent_response
-                )
+                artifacts = self.graph_artifact_service.create_graph_artifacts(message, agent_response)
 
             logger.info(
                 "Graph artifacts generated (sync): conversation_id=%s count=%s intent=%s",
@@ -236,9 +219,7 @@ class ChatService:
                 role="agent",
                 content=agent_response,
                 metadata={
-                    **agent_result.get(
-                        "metadata", {"tokens_used": 0, "tool_calls": []}
-                    ),
+                    **agent_result.get("metadata", {"tokens_used": 0, "tool_calls": []}),
                     "tool_calls": agent_tool_calls,
                     "artifacts": artifacts,
                     "context": context_meta,
@@ -322,27 +303,15 @@ class ChatService:
                     # Materialize so a failure surfaces before we start yielding.
                     stream = list(stream)
                 except Exception as gemini_err:
-                    logger.error(
-                        "Gemini stream failed, falling back to Ollama: %s", gemini_err
-                    )
+                    logger.error("Gemini stream failed, falling back to Ollama: %s", gemini_err)
                     try:
-                        stream = list(
-                            self._ollama_stream(
-                                message, history, context_cfg, fallback=True
-                            )
-                        )
+                        stream = list(self._ollama_stream(message, history, context_cfg, fallback=True))
                     except Exception:
-                        logger.error(
-                            "Ollama fallback also failed; re-raising original Gemini error"
-                        )
-                        raise RuntimeError(
-                            f"Gemini error: {gemini_err}"
-                        ) from gemini_err
+                        logger.error("Ollama fallback also failed; re-raising original Gemini error")
+                        raise RuntimeError(f"Gemini error: {gemini_err}") from gemini_err
             else:
                 if provider == "gemini":
-                    logger.warning(
-                        "Provider is 'gemini' but it is unavailable (enabled/API key missing); using Ollama"
-                    )
+                    logger.warning("Provider is 'gemini' but it is unavailable (enabled/API key missing); using Ollama")
                 stream = self._ollama_stream(message, history, context_cfg)
 
             for event in stream:
@@ -365,9 +334,7 @@ class ChatService:
                         "context": {
                             "history_message_count": len(history),
                             "context_max_messages": context_cfg.get("max_messages", 12),
-                            "context_max_input_chars": context_cfg.get(
-                                "max_input_chars", 12000
-                            ),
+                            "context_max_input_chars": context_cfg.get("max_input_chars", 12000),
                         },
                     },
                 }
@@ -395,9 +362,7 @@ class ChatService:
         # Only generate graph artifacts if user message indicates visualization intent
         artifacts = []
         if self.agent._wants_visualization(user_prompt):
-            artifacts = self.graph_artifact_service.create_graph_artifacts(
-                user_prompt, content
-            )
+            artifacts = self.graph_artifact_service.create_graph_artifacts(user_prompt, content)
 
         logger.info(
             "Graph artifacts generated (stream): conversation_id=%s count=%s intent=%s",
