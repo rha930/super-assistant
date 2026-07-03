@@ -4,7 +4,7 @@ import os
 import sqlite3
 import uuid
 from datetime import datetime, timezone
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 logger = logging.getLogger(__name__)
 
@@ -59,8 +59,8 @@ class LocalChatHistoryRepository:
         conversation_id: str,
         role: str,
         content: str,
-        metadata: Optional[Dict[str, Any]] = None,
-    ) -> Dict[str, Any]:
+        metadata: dict[str, Any] | None = None,
+    ) -> dict[str, Any]:
         timestamp = datetime.now(timezone.utc).isoformat()
         message_id = f"msg_{uuid.uuid4().hex}"
         message = {
@@ -108,12 +108,12 @@ class LocalChatHistoryRepository:
 
         return message
 
-    def get_messages(self, user_id: str, conversation_id: str, limit: Optional[int] = None) -> List[Dict[str, Any]]:
+    def get_messages(self, user_id: str, conversation_id: str, limit: int | None = None) -> list[dict[str, Any]]:
         query = (
             "SELECT id, user_id, conversation_id, role, content, timestamp, metadata_json "
             "FROM chat_messages WHERE user_id = ? AND conversation_id = ? ORDER BY timestamp ASC"
         )
-        params: List[Any] = [user_id, conversation_id]
+        params: list[Any] = [user_id, conversation_id]
         if limit is not None and limit > 0:
             query += " LIMIT ?"
             params.append(limit)
@@ -121,9 +121,9 @@ class LocalChatHistoryRepository:
         with self._connect() as conn:
             rows = conn.execute(query, tuple(params)).fetchall()
 
-        messages: List[Dict[str, Any]] = []
+        messages: list[dict[str, Any]] = []
         for row in rows:
-            metadata: Dict[str, Any] = {}
+            metadata: dict[str, Any] = {}
             raw_meta = row["metadata_json"]
             if raw_meta:
                 try:
@@ -157,7 +157,7 @@ class LocalChatHistoryRepository:
             conn.execute("DELETE FROM chat_messages WHERE user_id = ?", (user_id,))
             conn.commit()
 
-    def list_conversations(self, user_id: str, limit: int = 50) -> List[Dict[str, Any]]:
+    def list_conversations(self, user_id: str, limit: int = 50) -> list[dict[str, Any]]:
         with self._connect() as conn:
             rows = conn.execute(
                 """

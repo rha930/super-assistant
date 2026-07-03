@@ -2,8 +2,7 @@ import json
 import logging
 import os
 import uuid
-from datetime import datetime, timezone, timedelta
-from typing import Optional
+from datetime import datetime, timedelta, timezone
 
 import bcrypt
 import jwt
@@ -27,7 +26,7 @@ class AuthService:
             self.users = []
             return
         try:
-            with open(self.users_file, "r") as f:
+            with open(self.users_file) as f:
                 data = json.load(f)
             self.users = data.get("users", [])
             logger.info("Loaded %d user(s) from %s", len(self.users), self.users_file)
@@ -43,7 +42,7 @@ class AuthService:
         except Exception as e:
             logger.error("Failed to save users file: %s", e)
 
-    def authenticate(self, username: str, password: str) -> Optional[dict]:
+    def authenticate(self, username: str, password: str) -> dict | None:
         """Verify credentials. Returns user dict (without hash) or None."""
         for user in self.users:
             if user.get("username") == username and user.get("active", True):
@@ -62,7 +61,7 @@ class AuthService:
         }
         return jwt.encode(payload, self.secret_key, algorithm="HS256")
 
-    def validate_token(self, token: str) -> Optional[dict]:
+    def validate_token(self, token: str) -> dict | None:
         """Decode and validate JWT. Returns payload or None if invalid/expired."""
         try:
             payload = jwt.decode(token, self.secret_key, algorithms=["HS256"])
@@ -98,7 +97,7 @@ class AuthService:
         """Return all users without password hashes."""
         return [self._safe_user(u) for u in self.users if u.get("active", True)]
 
-    def get_user_by_id(self, user_id: str) -> Optional[dict]:
+    def get_user_by_id(self, user_id: str) -> dict | None:
         for user in self.users:
             if user.get("id") == user_id and user.get("active", True):
                 return self._safe_user(user)

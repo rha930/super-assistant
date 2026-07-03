@@ -1,8 +1,11 @@
+from typing import Any
+
 from pydantic import BaseModel
-from typing import Dict, Any
+
 
 class Config(BaseModel):
     """Configuration model."""
-    model_parameters: Dict[str, Any]
+
+    model_parameters: dict[str, Any]
     system_prompt: str
-    agent_config: Dict[str, Any]
+    agent_config: dict[str, Any]

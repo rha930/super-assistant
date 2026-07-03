@@ -14,6 +14,11 @@ services:
       - OLLAMA_BASE_URL=${OLLAMA_BASE_URL:-http://host.docker.internal:11434}
       - OLLAMA_MODEL=${OLLAMA_MODEL:-gemma4}
       - OLLAMA_TIMEOUT_SECONDS=${OLLAMA_TIMEOUT_SECONDS:-120}
+      - AGENT_PROVIDER=${AGENT_PROVIDER:-ollama}
+      - GEMINI_ENABLED=${GEMINI_ENABLED:-False}
+      - GEMINI_API_KEY=${GEMINI_API_KEY:-}
+      - GEMINI_MODEL=${GEMINI_MODEL:-gemini-2.5-flash}
+      - GEMINI_MODELS=${GEMINI_MODELS:-gemini-2.5-flash,gemini-2.5-pro}
       - HISTORY_BACKEND_TYPE=${HISTORY_BACKEND_TYPE:-local}
       - HISTORY_DB_PATH=/app/data/chat_history.db
       - HISTORY_REDIS_URL=${HISTORY_REDIS_URL:-redis://redis:6379/0}

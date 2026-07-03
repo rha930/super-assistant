@@ -28,6 +28,23 @@
         </select>
       </div>
 
+      <!-- Provider -->
+      <div>
+        <h3 class="text-sm font-semibold app-text mb-2">Provider</h3>
+        <select
+          v-model="config.provider"
+          @change="onProviderChange"
+          class="w-full px-3 py-2 border app-border rounded-lg text-sm app-surface app-text"
+          aria-label="Select provider"
+        >
+          <option value="ollama">Ollama (local)</option>
+          <option value="gemini" :disabled="!geminiAvailable">Gemini (cloud)</option>
+        </select>
+        <p v-if="!geminiAvailable" class="text-xs app-text-muted mt-1">
+          Gemini is not configured. Add an API key to enable it.
+        </p>
+      </div>
+
       <!-- Model Selection -->
       <div>
         <div class="flex items-center justify-between mb-2">
@@ -80,10 +97,10 @@
           aria-label="Select model"
         >
           <option v-if="noModelsAvailable" value="" disabled>
-            No local models available. Pull a model first.
+            No models available for this provider.
           </option>
           <option
-            v-for="model in configStore.availableModels"
+            v-for="model in activeModels"
             :key="model"
             :value="model"
           >
@@ -240,6 +257,7 @@ const onThemeChange = (event: Event) => {
 }
 
 const config = reactive({
+  provider: 'ollama' as 'ollama' | 'gemini',
   model: '',
   model_parameters: {
     temperature: 0.7,
@@ -253,6 +271,9 @@ const config = reactive({
   }
 })
 
+// Remember the last-selected model per provider so switching back restores it.
+const lastModelByProvider = reactive<Record<string, string>>({ ollama: '', gemini: '' })
+
 const activeModel = computed(() => {
   const value = (config.model || '').trim()
   return value || 'No active model configured'
@@ -260,42 +281,81 @@ const activeModel = computed(() => {
 
 const modelsLoading = computed(() => configStore.modelsLoading)
 
+// Reflect the provider currently selected in this panel (not the saved store
+// value), so the model list switches immediately when the dropdown changes.
+const activeModels = computed(() =>
+  config.provider === 'gemini' ? configStore.geminiModels : configStore.availableModels
+)
+
+const geminiAvailable = computed(() => configStore.geminiAvailable)
+
 const noModelsAvailable = computed(() =>
-  !configStore.modelsLoading && configStore.availableModels.length === 0
+  !configStore.modelsLoading && activeModels.value.length === 0
 )
 
 const isModelStale = computed(() => {
   const model = (config.model || '').trim()
   if (!model) return false
-  if (configStore.availableModels.length === 0) return false
-  return !configStore.availableModels.includes(model)
+  if (activeModels.value.length === 0) return false
+  return !activeModels.value.includes(model)
 })
 
 const canSave = computed(() => {
   const model = (config.model || '').trim()
   if (!model) return false
   if (isModelStale.value) return false
+  if (config.provider === 'gemini' && !geminiAvailable.value) return false
   return true
 })
 
+const onProviderChange = async () => {
+  // Persist current model for the provider we're leaving.
+  const previous = config.provider === 'gemini' ? 'ollama' : 'gemini'
+  lastModelByProvider[previous] = config.model
+
+  if (config.provider === 'gemini') {
+    await configStore.loadGeminiModels()
+  }
+
+  // Restore or pick a valid model for the newly selected provider.
+  const models = activeModels.value
+  const remembered = lastModelByProvider[config.provider]
+  if (remembered && models.includes(remembered)) {
+    config.model = remembered
+  } else if (!models.includes(config.model)) {
+    config.model = models[0] || ''
+  }
+}
+
 const refreshModels = async () => {
-  await configStore.loadAvailableModels()
+  if (config.provider === 'gemini') {
+    await configStore.loadGeminiModels()
+  } else {
+    await configStore.loadAvailableModels()
+  }
 }
 
 onMounted(async () => {
   await configStore.loadConfig()
   const stored = configStore.getConfig()
   Object.assign(config, stored)
-  await configStore.loadAvailableModels()
+  await Promise.all([
+    configStore.loadAvailableModels(),
+    configStore.loadGeminiModels()
+  ])
 })
 
 const saveConfig = async () => {
   const model = (config.model || '').trim()
+  if (config.provider === 'gemini' && !geminiAvailable.value) {
+    alert('Gemini is not configured. Add an API key to enable it.')
+    return
+  }
   if (!model) {
     alert('Please select a model before saving.')
     return
   }
-  if (configStore.availableModels.length > 0 && !configStore.availableModels.includes(model)) {
+  if (activeModels.value.length > 0 && !activeModels.value.includes(model)) {
     alert('Selected model is no longer available. Please choose another.')
     return
   }

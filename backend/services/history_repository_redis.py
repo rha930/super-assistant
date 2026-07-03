@@ -2,7 +2,7 @@ import json
 import logging
 import uuid
 from datetime import datetime, timezone
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 import redis
 
@@ -15,7 +15,7 @@ class RedisChatHistoryRepository:
     def __init__(
         self,
         redis_url: str,
-        redis_prefix: str = 'chat',
+        redis_prefix: str = "chat",
         max_messages_per_conversation: int = 200,
     ):
         self.redis_prefix = redis_prefix
@@ -31,17 +31,17 @@ class RedisChatHistoryRepository:
         conversation_id: str,
         role: str,
         content: str,
-        metadata: Optional[Dict[str, Any]] = None,
-    ) -> Dict[str, Any]:
+        metadata: dict[str, Any] | None = None,
+    ) -> dict[str, Any]:
         timestamp = datetime.now(timezone.utc).isoformat()
         message = {
-            'id': f"msg_{uuid.uuid4().hex}",
-            'user_id': user_id,
-            'conversation_id': conversation_id,
-            'role': role,
-            'content': content,
-            'timestamp': timestamp,
-            'metadata': metadata or {},
+            "id": f"msg_{uuid.uuid4().hex}",
+            "user_id": user_id,
+            "conversation_id": conversation_id,
+            "role": role,
+            "content": content,
+            "timestamp": timestamp,
+            "metadata": metadata or {},
         }
 
         key = self._messages_key(user_id, conversation_id)
@@ -55,18 +55,18 @@ class RedisChatHistoryRepository:
 
         return message
 
-    def get_messages(self, user_id: str, conversation_id: str, limit: Optional[int] = None) -> List[Dict[str, Any]]:
+    def get_messages(self, user_id: str, conversation_id: str, limit: int | None = None) -> list[dict[str, Any]]:
         key = self._messages_key(user_id, conversation_id)
         raw_items = self.client.zrange(key, 0, -1)
         if limit is not None and limit > 0:
             raw_items = raw_items[-limit:]
 
-        messages: List[Dict[str, Any]] = []
+        messages: list[dict[str, Any]] = []
         for item in raw_items:
             try:
                 messages.append(json.loads(item))
             except json.JSONDecodeError:
-                logger.warning('Failed to decode redis chat message item')
+                logger.warning("Failed to decode redis chat message item")
         return messages
 
     def delete_conversation(self, user_id: str, conversation_id: str) -> None:
@@ -78,14 +78,14 @@ class RedisChatHistoryRepository:
         if keys:
             self.client.delete(*keys)
 
-    def list_conversations(self, user_id: str, limit: int = 50) -> List[Dict[str, Any]]:
+    def list_conversations(self, user_id: str, limit: int = 50) -> list[dict[str, Any]]:
         pattern = f"{self.redis_prefix}:{user_id}:*:messages"
-        results: List[Dict[str, Any]] = []
+        results: list[dict[str, Any]] = []
 
         for key in self.client.scan_iter(match=pattern):
             key_str = str(key)
             # Expected format: prefix:user_id:conversation_id:messages
-            parts = key_str.split(':')
+            parts = key_str.split(":")
             if len(parts) < 4:
                 continue
             conversation_id = parts[-2]
@@ -104,25 +104,25 @@ class RedisChatHistoryRepository:
             if not parsed:
                 continue
 
-            first_ts = parsed[0].get('timestamp')
-            last_ts = parsed[-1].get('timestamp')
-            preview = ''
+            first_ts = parsed[0].get("timestamp")
+            last_ts = parsed[-1].get("timestamp")
+            preview = ""
             for msg in parsed:
-                if msg.get('role') == 'user' and msg.get('content'):
-                    preview = str(msg.get('content'))[:120]
+                if msg.get("role") == "user" and msg.get("content"):
+                    preview = str(msg.get("content"))[:120]
                     break
             if not preview:
-                preview = str(parsed[0].get('content') or '')[:120]
+                preview = str(parsed[0].get("content") or "")[:120]
 
             results.append(
                 {
-                    'conversation_id': conversation_id,
-                    'first_message_at': first_ts,
-                    'last_message_at': last_ts,
-                    'message_count': len(parsed),
-                    'preview': preview,
+                    "conversation_id": conversation_id,
+                    "first_message_at": first_ts,
+                    "last_message_at": last_ts,
+                    "message_count": len(parsed),
+                    "preview": preview,
                 }
             )
 
-        results.sort(key=lambda x: x.get('last_message_at') or '', reverse=True)
+        results.sort(key=lambda x: x.get("last_message_at") or "", reverse=True)
         return results[:limit]
