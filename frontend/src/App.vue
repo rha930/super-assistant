@@ -31,6 +31,22 @@
           </button>
 
           <button
+            @click="toggleNotesPanel"
+            :class="[
+              'p-2 rounded-lg transition-opacity hover:opacity-80',
+              notesStore.noteTakingMode ? 'text-green-500' : 'app-text-muted'
+            ]"
+            aria-label="Toggle notes panel"
+            title="Notes"
+          >
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" class="w-6 h-6">
+              <path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8l-6-6z"></path>
+              <path d="M14 2v6h6"></path>
+              <path d="M16 13H8M16 17H8M10 9H8" stroke="currentColor" stroke-width="1" fill="none"></path>
+            </svg>
+          </button>
+
+          <button
             @click="toggleHistoryPanel"
             class="p-2 app-text-muted rounded-lg transition-opacity hover:opacity-80"
             aria-label="Toggle history panel"
@@ -107,6 +123,14 @@
       >
         <HistoryPanel />
       </aside>
+
+      <!-- Notes Panel -->
+      <aside
+        v-if="showNotesPanel"
+        class="w-96 flex flex-col min-w-0"
+      >
+        <NotesPanel />
+      </aside>
     </main>
   </div>
 </template>
@@ -118,15 +142,19 @@ import ConfigPanel from './components/ConfigPanel.vue'
 import GraphPanel from './components/GraphPanel.vue'
 import HistoryPanel from './components/HistoryPanel.vue'
 import LoginPage from './components/LoginPage.vue'
+import NotesPanel from './components/NotesPanel.vue'
 import { useChatStore } from './stores/chatStore'
 import { useAuthStore } from './stores/authStore'
+import { useNotesStore } from './stores/notesStore'
 
 const showConfigPanel = ref(false)
 const showGraphPanel = ref(false)
 const showHistoryPanel = ref(false)
+const showNotesPanel = ref(false)
 const graphPanelWidth = ref(384)
 const chatStore = useChatStore()
 const authStore = useAuthStore()
+const notesStore = useNotesStore()
 
 const isAuthenticated = computed(() => authStore.isAuthenticated)
 const authLoading = computed(() => authStore.loading)
@@ -142,6 +170,13 @@ const toggleGraphPanel = () => {
 
 const toggleHistoryPanel = () => {
   showHistoryPanel.value = !showHistoryPanel.value
+}
+
+const toggleNotesPanel = () => {
+  showNotesPanel.value = !showNotesPanel.value
+  if (!showNotesPanel.value) {
+    notesStore.exitNoteTakingMode()
+  }
 }
 
 const handleLogout = () => {
