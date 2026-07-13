@@ -15,18 +15,20 @@ class GeminiService:
     The API key is supplied from the environment and is never logged or returned.
     """
 
-    def __init__(self, config: dict[str, Any] | None = None, api_key: str = ''):
+    def __init__(self, config: dict[str, Any] | None = None, api_key: str = ""):
         config = config or {}
-        self.enabled = bool(config.get('enabled', False))
-        self.api_key = api_key or ''
-        self.model = config.get('model', 'gemini-1.5-flash')
-        self.base_url = str(config.get('base_url', 'https://generativelanguage.googleapis.com/v1beta')).rstrip('/')
-        self.timeout_seconds = int(config.get('timeout_seconds', 60))
-        self.max_output_tokens = int(config.get('max_output_tokens', 2048))
-        self.models: list[str] = list(config.get('models', []) or [])
+        self.enabled = bool(config.get("enabled", False))
+        self.api_key = api_key or ""
+        self.model = config.get("model", "gemini-1.5-flash")
+        self.base_url = str(config.get("base_url", "https://generativelanguage.googleapis.com/v1beta")).rstrip("/")
+        self.timeout_seconds = int(config.get("timeout_seconds", 60))
+        self.max_output_tokens = int(config.get("max_output_tokens", 2048))
+        self.models: list[str] = list(config.get("models", []) or [])
         logger.info(
             "Gemini service initialized (enabled=%s, model=%s, models=%s)",
-            self.enabled, self.model, self.models,
+            self.enabled,
+            self.model,
+            self.models,
         )
 
     def is_available(self) -> bool:
@@ -47,14 +49,14 @@ class GeminiService:
         """Map conversation history + the new message to Gemini `contents`."""
         contents: list[dict[str, Any]] = []
         for item in conversation_history or []:
-            role = str(item.get('role', '')).strip().lower()
-            text = str(item.get('content', '')).strip()
+            role = str(item.get("role", "")).strip().lower()
+            text = str(item.get("content", "")).strip()
             if not text:
                 continue
-            gemini_role = 'user' if role == 'user' else 'model'
-            contents.append({'role': gemini_role, 'parts': [{'text': text}]})
+            gemini_role = "user" if role == "user" else "model"
+            contents.append({"role": gemini_role, "parts": [{"text": text}]})
 
-        contents.append({'role': 'user', 'parts': [{'text': user_message}]})
+        contents.append({"role": "user", "parts": [{"text": user_message}]})
         return contents
 
     def generate(
@@ -71,27 +73,27 @@ class GeminiService:
         Raises RuntimeError on any API/network failure so callers can fall back.
         """
         if not self.is_available():
-            raise RuntimeError('Gemini is not available (disabled or missing API key)')
+            raise RuntimeError("Gemini is not available (disabled or missing API key)")
 
-        model = kwargs.get('model') or self.model
+        model = kwargs.get("model") or self.model
         url = f"{self.base_url}/models/{model}:generateContent"
 
         payload: dict[str, Any] = {
-            'contents': self._build_contents(user_message, conversation_history),
-            'generationConfig': {
-                'temperature': kwargs.get('temperature', 0.7),
-                'topP': kwargs.get('top_p', 0.9),
-                'maxOutputTokens': kwargs.get('max_tokens', self.max_output_tokens),
+            "contents": self._build_contents(user_message, conversation_history),
+            "generationConfig": {
+                "temperature": kwargs.get("temperature", 0.7),
+                "topP": kwargs.get("top_p", 0.9),
+                "maxOutputTokens": kwargs.get("max_tokens", self.max_output_tokens),
             },
         }
         if system_prompt:
-            payload['systemInstruction'] = {'parts': [{'text': system_prompt}]}
+            payload["systemInstruction"] = {"parts": [{"text": system_prompt}]}
 
         logger.info("Calling Gemini generateContent (model=%s)", model)
         try:
             response = requests.post(
                 url,
-                params={'key': self.api_key},
+                params={"key": self.api_key},
                 json=payload,
                 timeout=self.timeout_seconds,
             )
@@ -101,7 +103,7 @@ class GeminiService:
             logger.error("Gemini request timed out after %ss (model=%s)", self.timeout_seconds, model)
             raise RuntimeError(f"Gemini request timed out after {self.timeout_seconds}s") from e
         except requests.exceptions.HTTPError as e:
-            status = getattr(e.response, 'status_code', 'unknown')
+            status = getattr(e.response, "status_code", "unknown")
             api_message = self._extract_error_message(e.response)
             # Log full detail server-side (status + API message) to aid debugging.
             logger.error("Gemini API error %s (model=%s): %s", status, model, api_message)
@@ -112,20 +114,21 @@ class GeminiService:
             raise RuntimeError(f"Gemini request failed: {e.__class__.__name__}") from e
         except ValueError as e:
             logger.error("Gemini returned a malformed response (model=%s)", model)
-            raise RuntimeError('Gemini returned a malformed response') from e
+            raise RuntimeError("Gemini returned a malformed response") from e
 
         content = self._extract_text(data)
         usage = self._extract_usage(data)
         logger.info(
             "Gemini call succeeded (model=%s, output_tokens=%s)",
-            model, (usage or {}).get('output_tokens', 0),
+            model,
+            (usage or {}).get("output_tokens", 0),
         )
 
         return {
-            'content': content,
-            'model': model,
-            'provider': 'gemini',
-            'usage': usage,
+            "content": content,
+            "model": model,
+            "provider": "gemini",
+            "usage": usage,
         }
 
     def stream_generate(
@@ -146,29 +149,29 @@ class GeminiService:
             conversation_history=conversation_history,
             **kwargs,
         )
-        model = result.get('model', self.model)
-        content = result.get('content', '')
+        model = result.get("model", self.model)
+        content = result.get("content", "")
 
         if content:
             yield {
-                'chunk': content,
-                'done': False,
-                'metadata': {
-                    'provider': 'gemini',
-                    'model': model,
-                    'tool_calls': [],
+                "chunk": content,
+                "done": False,
+                "metadata": {
+                    "provider": "gemini",
+                    "model": model,
+                    "tool_calls": [],
                 },
             }
 
-        usage = result.get('usage') or {}
+        usage = result.get("usage") or {}
         yield {
-            'chunk': '',
-            'done': True,
-            'metadata': {
-                'provider': 'gemini',
-                'model': model,
-                'tool_calls': [],
-                'tokens_used': usage.get('output_tokens', 0),
+            "chunk": "",
+            "done": True,
+            "metadata": {
+                "provider": "gemini",
+                "model": model,
+                "tool_calls": [],
+                "tokens_used": usage.get("output_tokens", 0),
             },
         }
 
@@ -181,31 +184,31 @@ class GeminiService:
         query param, not echoed in error bodies).
         """
         if response is None:
-            return 'no response body'
+            return "no response body"
         try:
             body = response.json()
-            message = (body.get('error') or {}).get('message')
+            message = (body.get("error") or {}).get("message")
             if message:
                 return str(message)
         except (ValueError, AttributeError):
             pass
-        text = getattr(response, 'text', '') or ''
-        return text[:200] if text else 'unknown error'
+        text = getattr(response, "text", "") or ""
+        return text[:200] if text else "unknown error"
 
     @staticmethod
     def _extract_text(data: dict[str, Any]) -> str:
-        candidates = data.get('candidates') or []
+        candidates = data.get("candidates") or []
         if not candidates:
-            return ''
-        parts = (candidates[0].get('content') or {}).get('parts') or []
-        return ''.join(part.get('text', '') for part in parts).strip()
+            return ""
+        parts = (candidates[0].get("content") or {}).get("parts") or []
+        return "".join(part.get("text", "") for part in parts).strip()
 
     @staticmethod
     def _extract_usage(data: dict[str, Any]) -> dict[str, int] | None:
-        meta = data.get('usageMetadata')
+        meta = data.get("usageMetadata")
         if not meta:
             return None
         return {
-            'input_tokens': int(meta.get('promptTokenCount', 0)),
-            'output_tokens': int(meta.get('candidatesTokenCount', 0)),
+            "input_tokens": int(meta.get("promptTokenCount", 0)),
+            "output_tokens": int(meta.get("candidatesTokenCount", 0)),
         }

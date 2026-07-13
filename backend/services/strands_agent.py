@@ -12,9 +12,10 @@ logger = logging.getLogger(__name__)
 try:
     from config import OLLAMA_BASE_URL, OLLAMA_MODEL, OLLAMA_TIMEOUT_SECONDS
 except ImportError:
-    OLLAMA_BASE_URL = os.getenv('OLLAMA_BASE_URL', 'http://localhost:11434')
-    OLLAMA_MODEL = os.getenv('OLLAMA_MODEL', 'gemma4')
-    OLLAMA_TIMEOUT_SECONDS = int(os.getenv('OLLAMA_TIMEOUT_SECONDS', '120'))
+    OLLAMA_BASE_URL = os.getenv("OLLAMA_BASE_URL", "http://localhost:11434")
+    OLLAMA_MODEL = os.getenv("OLLAMA_MODEL", "gemma4")
+    OLLAMA_TIMEOUT_SECONDS = int(os.getenv("OLLAMA_TIMEOUT_SECONDS", "120"))
+
 
 class StrandsAgentService:
     """Service for interacting with a localhosted Ollama model."""
@@ -27,16 +28,26 @@ class StrandsAgentService:
             base_url: Ollama server base URL (defaults to OLLAMA_BASE_URL env or config)
             model: Default model name (defaults to OLLAMA_MODEL env or config)
         """
-        self.base_url = (base_url or OLLAMA_BASE_URL or 'http://localhost:11434').rstrip('/')
-        self.model = model or OLLAMA_MODEL or 'gemma4'
+        self.base_url = (base_url or OLLAMA_BASE_URL or "http://localhost:11434").rstrip("/")
+        self.model = model or OLLAMA_MODEL or "gemma4"
         logger.info("Ollama service initialized at %s with model %s", self.base_url, self.model)
 
     def _wants_visualization(self, user_message: str) -> bool:
-        text = (user_message or '').lower()
+        text = (user_message or "").lower()
         keywords = [
-            'plot', 'chart', 'graph', 'visualize', 'visualise', 'trend',
-            'compare', 'comparison', 'distribution', 'histogram',
-            'line chart', 'bar chart', 'pie chart'
+            "plot",
+            "chart",
+            "graph",
+            "visualize",
+            "visualise",
+            "trend",
+            "compare",
+            "comparison",
+            "distribution",
+            "histogram",
+            "line chart",
+            "bar chart",
+            "pie chart",
         ]
         return any(keyword in text for keyword in keywords)
 
@@ -45,23 +56,23 @@ class StrandsAgentService:
             "When the user asks for a chart/graph/visualization and data is available, "
             "you MUST include one JSON graph artifact in a fenced ```json block using this exact schema:\n"
             "{\n"
-            "  \"type\": \"graph\",\n"
-            "  \"graph\": {\n"
-            "    \"id\": \"graph_unique_id\",\n"
-            "    \"title\": \"Descriptive title\",\n"
-            "    \"chartType\": \"line\" | \"bar\" | \"pie\",\n"
-            "    \"xLabel\": \"Category\",\n"
-            "    \"yLabel\": \"Value\",\n"
-            "    \"series\": [\n"
+            '  "type": "graph",\n'
+            '  "graph": {\n'
+            '    "id": "graph_unique_id",\n'
+            '    "title": "Descriptive title",\n'
+            '    "chartType": "line" | "bar" | "pie",\n'
+            '    "xLabel": "Category",\n'
+            '    "yLabel": "Value",\n'
+            '    "series": [\n'
             "      {\n"
-            "        \"name\": \"Series 1\",\n"
-            "        \"data\": [\n"
-            "          {\"x\": \"Label 1\", \"y\": 10},\n"
-            "          {\"x\": \"Label 2\", \"y\": 20}\n"
+            '        "name": "Series 1",\n'
+            '        "data": [\n'
+            '          {"x": "Label 1", "y": 10},\n'
+            '          {"x": "Label 2", "y": 20}\n'
             "        ]\n"
             "      }\n"
             "    ],\n"
-            "    \"options\": {\"showLegend\": true, \"stacked\": false}\n"
+            '    "options": {"showLegend": true, "stacked": false}\n'
             "  }\n"
             "}\n"
             "Rules: only use chartType line/bar/pie; y must be numeric; include at least 2 data points; "
@@ -74,7 +85,7 @@ class StrandsAgentService:
         system_prompt: str | None = None,
         conversation_history: list | None = None,
         max_messages: int = 12,
-        max_input_chars: int = 12000
+        max_input_chars: int = 12000,
     ) -> str:
         sections = []
 
@@ -89,14 +100,14 @@ class StrandsAgentService:
             history = history[-max_messages:]
 
         for item in history:
-            role = str(item.get('role', '')).strip().lower()
-            content = str(item.get('content', '')).strip()
+            role = str(item.get("role", "")).strip().lower()
+            content = str(item.get("content", "")).strip()
             if not content:
                 continue
 
-            if role == 'user':
+            if role == "user":
                 sections.append(f"User: {content}")
-            elif role in ('assistant', 'agent'):
+            elif role in ("assistant", "agent"):
                 sections.append(f"Assistant: {content}")
             else:
                 sections.append(f"Context: {content}")
@@ -111,41 +122,29 @@ class StrandsAgentService:
         return prompt
 
     def stream_agent(
-        self,
-        user_message: str,
-        system_prompt: str | None = None,
-        conversation_history: list | None = None,
-        **kwargs
+        self, user_message: str, system_prompt: str | None = None, conversation_history: list | None = None, **kwargs
     ) -> Generator[dict[str, Any], None, None]:
         """Stream response chunks from Ollama /api/generate."""
         try:
-            model = kwargs.get('model', self.model)
+            model = kwargs.get("model", self.model)
             prompt = self._build_prompt(
                 user_message=user_message,
                 system_prompt=system_prompt,
                 conversation_history=conversation_history,
-                max_messages=kwargs.get('context_max_messages', 12),
-                max_input_chars=kwargs.get('context_max_input_chars', 12000)
+                max_messages=kwargs.get("context_max_messages", 12),
+                max_input_chars=kwargs.get("context_max_input_chars", 12000),
             )
 
             options = {
-                'temperature': kwargs.get('temperature', 0.7),
-                'top_p': kwargs.get('top_p', 0.9),
-                'num_predict': kwargs.get('max_tokens', 1000)
+                "temperature": kwargs.get("temperature", 0.7),
+                "top_p": kwargs.get("top_p", 0.9),
+                "num_predict": kwargs.get("max_tokens", 1000),
             }
 
-            payload = {
-                'model': model,
-                'prompt': prompt,
-                'stream': True,
-                'options': options
-            }
+            payload = {"model": model, "prompt": prompt, "stream": True, "options": options}
 
             response = requests.post(
-                f"{self.base_url}/api/generate",
-                json=payload,
-                timeout=OLLAMA_TIMEOUT_SECONDS,
-                stream=True
+                f"{self.base_url}/api/generate", json=payload, timeout=OLLAMA_TIMEOUT_SECONDS, stream=True
             )
             response.raise_for_status()
 
@@ -154,29 +153,22 @@ class StrandsAgentService:
                     continue
 
                 data = json.loads(line)
-                chunk = data.get('response', '')
-                done = bool(data.get('done', False))
+                chunk = data.get("response", "")
+                done = bool(data.get("done", False))
 
                 if chunk:
-                    yield {
-                        'chunk': chunk,
-                        'done': False,
-                        'metadata': {
-                            'model': model,
-                            'tool_calls': []
-                        }
-                    }
+                    yield {"chunk": chunk, "done": False, "metadata": {"model": model, "tool_calls": []}}
 
                 if done:
                     yield {
-                        'chunk': '',
-                        'done': True,
-                        'metadata': {
-                            'tokens_used': data.get('eval_count', 0),
-                            'tool_calls': [],
-                            'model': model,
-                            'total_duration_ns': data.get('total_duration', 0)
-                        }
+                        "chunk": "",
+                        "done": True,
+                        "metadata": {
+                            "tokens_used": data.get("eval_count", 0),
+                            "tool_calls": [],
+                            "model": model,
+                            "total_duration_ns": data.get("total_duration", 0),
+                        },
                     }
                     break
 
@@ -199,7 +191,7 @@ class StrandsAgentService:
         user_message: str,
         system_prompt: str | None = None,
         conversation_history: list | None = None,
-        **kwargs
+        **kwargs,
     ) -> dict[str, Any]:
         """
         Invoke the Strands agent with a user message.
@@ -214,21 +206,15 @@ class StrandsAgentService:
         Returns:
             Agent response and metadata
         """
-        full_text = ''
-        metadata: dict[str, Any] = {'tool_calls': []}
+        full_text = ""
+        metadata: dict[str, Any] = {"tool_calls": []}
 
         for event in self.stream_agent(
-            user_message=user_message,
-            system_prompt=system_prompt,
-            conversation_history=conversation_history,
-            **kwargs
+            user_message=user_message, system_prompt=system_prompt, conversation_history=conversation_history, **kwargs
         ):
-            if event.get('chunk'):
-                full_text += event['chunk']
-            if event.get('done'):
-                metadata = event.get('metadata', metadata)
+            if event.get("chunk"):
+                full_text += event["chunk"]
+            if event.get("done"):
+                metadata = event.get("metadata", metadata)
 
-        return {
-            'response': full_text,
-            'metadata': metadata
-        }
+        return {"response": full_text, "metadata": metadata}
