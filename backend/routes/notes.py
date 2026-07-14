@@ -20,6 +20,7 @@ def _get_user_id() -> str:
 # CRUD
 # ------------------------------------------------------------------
 
+
 @notes_bp.route("", methods=["POST"])
 @require_auth
 def create_note():
@@ -104,6 +105,7 @@ def delete_note(note_id: str):
 # ------------------------------------------------------------------
 # LLM expansion
 # ------------------------------------------------------------------
+
 
 @notes_bp.route("/expand", methods=["POST"])
 @require_auth

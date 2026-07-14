@@ -5,9 +5,7 @@ from flask import Flask, request
 from flask_cors import CORS
 
 # Configure logging
-logging.basicConfig(
-    level=logging.INFO, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s"
-)
+logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s")
 logger = logging.getLogger(__name__)
 
 
@@ -32,9 +30,7 @@ def create_app():
     secret_key = AUTH_SECRET_KEY
     if not secret_key:
         secret_key = secrets.token_hex(32)
-        logger.warning(
-            "AUTH_SECRET_KEY not set — generated ephemeral key (will not persist across restarts)"
-        )
+        logger.warning("AUTH_SECRET_KEY not set — generated ephemeral key (will not persist across restarts)")
 
     auth_service = AuthService(
         users_file=AUTH_USERS_FILE,

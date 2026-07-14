@@ -56,17 +56,13 @@ class NoteService:
     # ------------------------------------------------------------------
     # CRUD delegates
     # ------------------------------------------------------------------
-    def create_note(
-        self, user_id: str, title: str = "Untitled Note", content: str = ""
-    ) -> dict[str, Any]:
+    def create_note(self, user_id: str, title: str = "Untitled Note", content: str = "") -> dict[str, Any]:
         return self.note_repo.create_note(user_id, title, content)
 
     def get_note(self, user_id: str, note_id: str) -> dict[str, Any] | None:
         return self.note_repo.get_note(user_id, note_id)
 
-    def update_note(
-        self, user_id: str, note_id: str, **kwargs: Any
-    ) -> dict[str, Any] | None:
+    def update_note(self, user_id: str, note_id: str, **kwargs: Any) -> dict[str, Any] | None:
         return self.note_repo.update_note(user_id, note_id, **kwargs)
 
     def delete_note(self, user_id: str, note_id: str) -> bool:
@@ -123,14 +119,10 @@ class NoteService:
         suggestion = self._generate(prompt, NOTE_EXPANSION_SYSTEM_PROMPT)
         return {"suggestion": suggestion.strip()}
 
-    def accept_suggestion(
-        self, user_id: str, note_id: str, suggestion: str
-    ) -> dict[str, Any] | None:
+    def accept_suggestion(self, user_id: str, note_id: str, suggestion: str) -> dict[str, Any] | None:
         """Append the LLM suggestion to the note."""
         return self.note_repo.append_content(user_id, note_id, suggestion)
 
-    def deny_suggestion(
-        self, user_id: str, note_id: str, original_input: str
-    ) -> dict[str, Any] | None:
+    def deny_suggestion(self, user_id: str, note_id: str, original_input: str) -> dict[str, Any] | None:
         """Append the user's raw input to the note."""
         return self.note_repo.append_content(user_id, note_id, original_input)

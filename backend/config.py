@@ -21,9 +21,7 @@ HOST = os.getenv("HOST", "0.0.0.0")
 
 # Ollama (local model runtime)
 OLLAMA_BASE_URL = os.getenv("OLLAMA_BASE_URL", "http://localhost:11434")
-OLLAMA_MODEL = os.getenv(
-    "OLLAMA_MODEL", "gemma4"
-)  # Leave blank to auto-detect from Ollama
+OLLAMA_MODEL = os.getenv("OLLAMA_MODEL", "gemma4")  # Leave blank to auto-detect from Ollama
 OLLAMA_TIMEOUT_SECONDS = int(os.getenv("OLLAMA_TIMEOUT_SECONDS", "120"))
 
 # Provider selection ('ollama' local runtime | 'gemini' cloud API)
@@ -33,16 +31,12 @@ AGENT_PROVIDER = os.getenv("AGENT_PROVIDER", "ollama")
 GEMINI_ENABLED = os.getenv("GEMINI_ENABLED", "False") == "True"
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY", "")
 GEMINI_MODEL = os.getenv("GEMINI_MODEL", "gemini-2.5-flash")
-GEMINI_BASE_URL = os.getenv(
-    "GEMINI_BASE_URL", "https://generativelanguage.googleapis.com/v1beta"
-)
+GEMINI_BASE_URL = os.getenv("GEMINI_BASE_URL", "https://generativelanguage.googleapis.com/v1beta")
 GEMINI_TIMEOUT_SECONDS = int(os.getenv("GEMINI_TIMEOUT_SECONDS", "60"))
 GEMINI_MAX_OUTPUT_TOKENS = int(os.getenv("GEMINI_MAX_OUTPUT_TOKENS", "2048"))
 # Comma-separated allow-list of selectable Gemini models.
 GEMINI_MODELS = [
-    m.strip()
-    for m in os.getenv("GEMINI_MODELS", "gemini-2.5-flash,gemini-2.5-pro").split(",")
-    if m.strip()
+    m.strip() for m in os.getenv("GEMINI_MODELS", "gemini-2.5-flash,gemini-2.5-pro").split(",") if m.strip()
 ]
 
 # Agent Model Defaults
@@ -50,18 +44,14 @@ AGENT_MODEL = os.getenv("AGENT_MODEL", OLLAMA_MODEL)
 DEFAULT_TEMPERATURE = float(os.getenv("DEFAULT_TEMPERATURE", "0.7"))
 DEFAULT_MAX_TOKENS = int(os.getenv("DEFAULT_MAX_TOKENS", "1000"))
 DEFAULT_TOP_P = float(os.getenv("DEFAULT_TOP_P", "0.9"))
-DEFAULT_SYSTEM_PROMPT = os.getenv(
-    "DEFAULT_SYSTEM_PROMPT", "You are a helpful AI assistant."
-)
+DEFAULT_SYSTEM_PROMPT = os.getenv("DEFAULT_SYSTEM_PROMPT", "You are a helpful AI assistant.")
 DEFAULT_MAX_ITERATIONS = int(os.getenv("DEFAULT_MAX_ITERATIONS", "10"))
 DEFAULT_TIMEOUT = int(os.getenv("DEFAULT_TIMEOUT", "30"))
 CONTEXT_MAX_MESSAGES = int(os.getenv("CONTEXT_MAX_MESSAGES", "12"))
 CONTEXT_MAX_INPUT_CHARS = int(os.getenv("CONTEXT_MAX_INPUT_CHARS", "12000"))
 HISTORY_BACKEND_TYPE = os.getenv("HISTORY_BACKEND_TYPE", "local")
 HISTORY_DB_PATH = os.getenv("HISTORY_DB_PATH", "./backend/data/chat_history.db")
-HISTORY_MAX_MESSAGES_PER_CONVERSATION = int(
-    os.getenv("HISTORY_MAX_MESSAGES_PER_CONVERSATION", "200")
-)
+HISTORY_MAX_MESSAGES_PER_CONVERSATION = int(os.getenv("HISTORY_MAX_MESSAGES_PER_CONVERSATION", "200"))
 HISTORY_REDIS_URL = os.getenv("HISTORY_REDIS_URL", "redis://localhost:6379/0")
 HISTORY_REDIS_PREFIX = os.getenv("HISTORY_REDIS_PREFIX", "chat")
 

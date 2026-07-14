@@ -11,7 +11,7 @@ logger = logging.getLogger(__name__)
 class NoteRepository:
     """Local SQLite-backed repository for user-scoped notes."""
 
-    def __init__(self, db_path: str = './backend/data/chat_history.db'):
+    def __init__(self, db_path: str = "./backend/data/chat_history.db"):
         self.db_path = db_path
         os.makedirs(os.path.dirname(self.db_path), exist_ok=True)
         self._init_db()
