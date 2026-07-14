@@ -87,14 +87,10 @@ def create_user():
         display_name = str(data.get("display_name", "")).strip()
 
         if not USERNAME_RE.match(username):
-            return ErrorResponse(
-                message="Username must be 3-30 alphanumeric/underscore characters"
-            ).to_dict(), 400
+            return ErrorResponse(message="Username must be 3-30 alphanumeric/underscore characters").to_dict(), 400
 
         if len(password) < MIN_PASSWORD_LEN:
-            return ErrorResponse(
-                message=f"Password must be at least {MIN_PASSWORD_LEN} characters"
-            ).to_dict(), 400
+            return ErrorResponse(message=f"Password must be at least {MIN_PASSWORD_LEN} characters").to_dict(), 400
 
         user = _auth_service.create_user(username, password, display_name)
         return SuccessResponse(message="User created", data=user).to_dict(), 201
