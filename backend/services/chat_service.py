@@ -4,7 +4,6 @@ from typing import Any
 
 from config import GEMINI_API_KEY
 from models.message import Message
-
 from services.config_service import get_config_service
 from services.gemini_service import GeminiService
 from services.graph_artifact_service import GraphArtifactService
