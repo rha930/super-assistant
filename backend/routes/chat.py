@@ -2,7 +2,6 @@ import json
 import logging
 
 from flask import Blueprint, Response, g, request, stream_with_context
-
 from middleware.auth import require_auth
 from models.response import ErrorResponse, SuccessResponse
 from services.chat_service import ChatService

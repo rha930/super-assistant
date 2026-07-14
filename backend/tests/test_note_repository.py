@@ -1,6 +1,5 @@
 
 import pytest
-
 from services.note_repository import NoteRepository
 
 
