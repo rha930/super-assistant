@@ -61,14 +61,39 @@ AUTH_SECRET_KEY = os.getenv("AUTH_SECRET_KEY", "")
 AUTH_TOKEN_EXPIRY_HOURS = int(os.getenv("AUTH_TOKEN_EXPIRY_HOURS", "24"))
 AUTH_USERS_FILE = os.getenv("AUTH_USERS_FILE", "./users.json")
 
+# Note expansion system prompt
+NOTE_EXPANSION_SYSTEM_PROMPT = os.getenv(
+    "NOTE_EXPANSION_SYSTEM_PROMPT",
+    "You are a note-taking assistant. The user is building a note and will give you short inputs.\n"
+    "Your job is to expand their input into well-formatted Markdown content suitable for a note.\n\n"
+    "Rules:\n"
+    "- Expand short phrases into structured, useful content (lists, headings, paragraphs).\n"
+    '- Pre-fill sensible defaults when the topic is common (e.g., "grocery list" -> a list with common items).\n'
+    "- Use proper Markdown formatting: headings (#), lists (-), bold (**), etc.\n"
+    "- If existing note content is provided, make your addition coherent with it.\n"
+    "- Keep expansions concise but useful — aim for practical, actionable content.\n"
+    "- Do NOT wrap your response in a code fence. Return raw Markdown only.\n"
+    '- Do NOT include preamble like "Here\'s your expanded note:". Just return the content.',
+)
+
 # Default Config
 DEFAULT_CONFIG = {
     "provider": AGENT_PROVIDER,
     "model": AGENT_MODEL,
-    "model_parameters": {"temperature": DEFAULT_TEMPERATURE, "max_tokens": DEFAULT_MAX_TOKENS, "top_p": DEFAULT_TOP_P},
+    "model_parameters": {
+        "temperature": DEFAULT_TEMPERATURE,
+        "max_tokens": DEFAULT_MAX_TOKENS,
+        "top_p": DEFAULT_TOP_P,
+    },
     "system_prompt": DEFAULT_SYSTEM_PROMPT,
-    "agent_config": {"max_iterations": DEFAULT_MAX_ITERATIONS, "timeout": DEFAULT_TIMEOUT},
-    "context_config": {"max_messages": CONTEXT_MAX_MESSAGES, "max_input_chars": CONTEXT_MAX_INPUT_CHARS},
+    "agent_config": {
+        "max_iterations": DEFAULT_MAX_ITERATIONS,
+        "timeout": DEFAULT_TIMEOUT,
+    },
+    "context_config": {
+        "max_messages": CONTEXT_MAX_MESSAGES,
+        "max_input_chars": CONTEXT_MAX_INPUT_CHARS,
+    },
     "history_config": {
         "backend_type": HISTORY_BACKEND_TYPE,
         "db_path": HISTORY_DB_PATH,

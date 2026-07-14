@@ -17,7 +17,12 @@ def create_app():
     CORS(app)
 
     # --- Auth setup ---
-    from config import AUTH_ENABLED, AUTH_SECRET_KEY, AUTH_TOKEN_EXPIRY_HOURS, AUTH_USERS_FILE
+    from config import (
+        AUTH_ENABLED,
+        AUTH_SECRET_KEY,
+        AUTH_TOKEN_EXPIRY_HOURS,
+        AUTH_USERS_FILE,
+    )
     from middleware.auth import init_auth
     from routes.auth import auth_bp, init_auth_routes
     from services.auth_service import AuthService
@@ -41,12 +46,14 @@ def create_app():
     from routes.config import config_bp
     from routes.gemini import gemini_bp
     from routes.health import health_bp
+    from routes.notes import notes_bp
 
     app.register_blueprint(auth_bp)
     app.register_blueprint(chat_bp)
     app.register_blueprint(config_bp)
     app.register_blueprint(health_bp)
     app.register_blueprint(gemini_bp)
+    app.register_blueprint(notes_bp)
 
     @app.before_request
     def before_request():

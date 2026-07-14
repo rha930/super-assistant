@@ -29,7 +29,7 @@ def cmd_create(args: argparse.Namespace) -> None:
     if user is None:
         print(f'Error: user "{args.username}" already exists', file=sys.stderr)
         sys.exit(1)
-    print(f'Created user: {user["username"]} (id={user["id"]})')
+    print(f"Created user: {user['username']} (id={user['id']})")
 
 
 def cmd_list(_args: argparse.Namespace) -> None:
@@ -39,7 +39,7 @@ def cmd_list(_args: argparse.Namespace) -> None:
         print("No users found.")
         return
     for u in users:
-        print(f'  {u["username"]:20s}  {u.get("display_name", "")}  (id={u["id"]})')
+        print(f"  {u['username']:20s}  {u.get('display_name', '')}  (id={u['id']})")
 
 
 def main() -> None:
