@@ -55,6 +55,14 @@ HISTORY_MAX_MESSAGES_PER_CONVERSATION = int(os.getenv("HISTORY_MAX_MESSAGES_PER_
 HISTORY_REDIS_URL = os.getenv("HISTORY_REDIS_URL", "redis://localhost:6379/0")
 HISTORY_REDIS_PREFIX = os.getenv("HISTORY_REDIS_PREFIX", "chat")
 
+# GNews News Articles Tool — API key is environment-only, never stored in config
+GNEWS_ENABLED = os.getenv("GNEWS_ENABLED", "False") == "True"
+GNEWS_API_KEY = os.getenv("GNEWS_API_KEY", "")
+GNEWS_MAX_RESULTS = int(os.getenv("GNEWS_MAX_RESULTS", "5"))  # GNews free tier max: 10
+GNEWS_LANGUAGE = os.getenv("GNEWS_LANGUAGE", "en")
+GNEWS_COUNTRY = os.getenv("GNEWS_COUNTRY", "us")
+GNEWS_TIMEOUT_SECONDS = int(os.getenv("GNEWS_TIMEOUT_SECONDS", "10"))
+
 # Authentication
 AUTH_ENABLED = os.getenv("AUTH_ENABLED", "True") == "True"
 AUTH_SECRET_KEY = os.getenv("AUTH_SECRET_KEY", "")
@@ -108,5 +116,13 @@ DEFAULT_CONFIG = {
         "timeout_seconds": GEMINI_TIMEOUT_SECONDS,
         "max_output_tokens": GEMINI_MAX_OUTPUT_TOKENS,
         "models": GEMINI_MODELS,
+    },
+    "gnews": {
+        "enabled": GNEWS_ENABLED,
+        "max_results": GNEWS_MAX_RESULTS,
+        "language": GNEWS_LANGUAGE,
+        "country": GNEWS_COUNTRY,
+        "timeout_seconds": GNEWS_TIMEOUT_SECONDS,
+        # GNEWS_API_KEY is never stored here — read from env at runtime only
     },
 }

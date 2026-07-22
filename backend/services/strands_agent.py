@@ -1,6 +1,8 @@
 import json
 import logging
 import os
+import re
+import time
 from collections.abc import Generator
 from typing import Any
 
@@ -51,6 +53,172 @@ class StrandsAgentService:
         ]
         return any(keyword in text for keyword in keywords)
 
+    def _wants_news(self, user_message: str) -> bool:
+        text = (user_message or "").lower()
+        keywords = [
+            "news",
+            "headline",
+            "headlines",
+            "latest",
+            "recent",
+            "breaking",
+            "today",
+            "this week",
+            "current events",
+            "what's happening",
+            "whats happening",
+            "what is happening",
+            "what happened",
+            "going on with",
+            "update on",
+            "updates on",
+            "developments",
+        ]
+        return any(keyword in text for keyword in keywords)
+
+    _NEWS_STOPWORDS = frozenset(
+        {
+            "the",
+            "a",
+            "an",
+            "of",
+            "on",
+            "in",
+            "for",
+            "to",
+            "about",
+            "with",
+            "and",
+            "or",
+            "is",
+            "are",
+            "was",
+            "were",
+            "be",
+            "been",
+            "do",
+            "does",
+            "did",
+            "you",
+            "me",
+            "my",
+            "i",
+            "we",
+            "us",
+            "please",
+            "tell",
+            "give",
+            "show",
+            "find",
+            "get",
+            "whats",
+            "what",
+            "whens",
+            "when",
+            "wheres",
+            "where",
+            "hows",
+            "how",
+            "any",
+            "some",
+            "latest",
+            "recent",
+            "news",
+            "headline",
+            "headlines",
+            "today",
+            "todays",
+            "current",
+            "breaking",
+            "update",
+            "updates",
+            "happening",
+            "happened",
+            "going",
+            "developments",
+        }
+    )
+
+    def _build_news_query(self, user_message: str) -> str:
+        """Strip conversational filler and trigger words so GNews gets clean keywords.
+
+        Falls back to the original message when stripping leaves nothing.
+        """
+        original = (user_message or "").strip()
+        tokens = re.findall(r"[a-z0-9]+", original.lower())
+        keywords = [t for t in tokens if t not in self._NEWS_STOPWORDS and len(t) > 1]
+        query = " ".join(keywords).strip()
+        return query or original
+
+    def _news_context_instructions(self) -> str:
+        return (
+            "You have access to a news search tool. Recent news articles relevant to the "
+            "user's request are provided below as context. Ground your answer in these "
+            "articles and cite the article titles and source names you use. If the articles "
+            "do not answer the question, say so plainly."
+        )
+
+    def _format_news_articles(self, articles: list[dict[str, Any]]) -> str:
+        lines = ["Recent news articles:"]
+        for idx, article in enumerate(articles, start=1):
+            title = str(article.get("title", "")).strip()
+            source = str(article.get("source", "")).strip()
+            published = str(article.get("published_at", "")).strip()
+            description = str(article.get("description", "")).strip()
+            url = str(article.get("url", "")).strip()
+            lines.append(f"{idx}. {title} — {source} ({published})\n   {description}\n   {url}")
+        return "\n".join(lines)
+
+    def _maybe_fetch_news(
+        self, user_message: str, gnews_service: Any | None
+    ) -> tuple[str | None, dict[str, Any] | None]:
+        """Fetch news articles if the message wants news and the tool is available.
+
+        Returns (news_context, tool_call). Both are None when no search runs.
+        """
+        if gnews_service is None or not getattr(gnews_service, "is_available", lambda: False)():
+            return None, None
+        if not self._wants_news(user_message):
+            return None, None
+
+        query = self._build_news_query(user_message)
+        start = time.monotonic()
+        try:
+            result = gnews_service.search(query)
+        except Exception as e:
+            duration_ms = int((time.monotonic() - start) * 1000)
+            logger.warning("News search failed: %s", e)
+            return None, {
+                "name": "news_search",
+                "status": "error",
+                "duration": duration_ms,
+                "inputs": {"query": query},
+                "outputs": {"article_count": 0, "articles": []},
+            }
+
+        duration_ms = int((time.monotonic() - start) * 1000)
+        articles = result.get("articles", []) or []
+        news_context = self._format_news_articles(articles) if articles else None
+        tool_call = {
+            "name": "news_search",
+            "status": "success",
+            "duration": duration_ms,
+            "inputs": {"query": query},
+            "outputs": {
+                "article_count": len(articles),
+                "articles": [
+                    {
+                        "title": a.get("title", ""),
+                        "source": a.get("source", ""),
+                        "url": a.get("url", ""),
+                        "published_at": a.get("published_at", ""),
+                    }
+                    for a in articles
+                ],
+            },
+        }
+        return news_context, tool_call
+
     def _graph_output_instructions(self) -> str:
         return (
             "When the user asks for a chart/graph/visualization and data is available, "
@@ -86,6 +254,7 @@ class StrandsAgentService:
         conversation_history: list | None = None,
         max_messages: int = 12,
         max_input_chars: int = 12000,
+        news_context: str | None = None,
     ) -> str:
         sections = []
 
@@ -94,6 +263,10 @@ class StrandsAgentService:
 
         if self._wants_visualization(user_message):
             sections.append(f"System: {self._graph_output_instructions()}")
+
+        if news_context:
+            sections.append(f"System: {self._news_context_instructions()}")
+            sections.append(f"Context: {news_context}")
 
         history = conversation_history or []
         if max_messages > 0 and history:
@@ -127,13 +300,19 @@ class StrandsAgentService:
         """Stream response chunks from Ollama /api/generate."""
         try:
             model = kwargs.get("model", self.model)
+
+            news_context, news_tool_call = self._maybe_fetch_news(user_message, kwargs.get("gnews_service"))
+
             prompt = self._build_prompt(
                 user_message=user_message,
                 system_prompt=system_prompt,
                 conversation_history=conversation_history,
                 max_messages=kwargs.get("context_max_messages", 12),
                 max_input_chars=kwargs.get("context_max_input_chars", 12000),
+                news_context=news_context,
             )
+
+            tool_calls = [news_tool_call] if news_tool_call else []
 
             options = {
                 "temperature": kwargs.get("temperature", 0.7),
@@ -157,7 +336,7 @@ class StrandsAgentService:
                 done = bool(data.get("done", False))
 
                 if chunk:
-                    yield {"chunk": chunk, "done": False, "metadata": {"model": model, "tool_calls": []}}
+                    yield {"chunk": chunk, "done": False, "metadata": {"model": model, "tool_calls": tool_calls}}
 
                 if done:
                     yield {
@@ -165,7 +344,7 @@ class StrandsAgentService:
                         "done": True,
                         "metadata": {
                             "tokens_used": data.get("eval_count", 0),
-                            "tool_calls": [],
+                            "tool_calls": tool_calls,
                             "model": model,
                             "total_duration_ns": data.get("total_duration", 0),
                         },
