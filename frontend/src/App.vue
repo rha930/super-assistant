@@ -9,42 +9,12 @@
 
   <!-- Main app when authenticated -->
   <div v-else id="app" class="h-screen flex flex-col app-bg app-text">
-    <!-- Header -->
+    <!-- Header: title + account controls only (no module toggles) -->
     <header class="app-surface border-b app-border px-6 py-4 shadow-sm">
       <div class="w-full flex items-center justify-between">
         <h1 class="text-2xl font-bold text-left">AERIAL</h1>
         <div class="flex items-center gap-3">
           <span class="text-sm app-text-muted hidden sm:inline">{{ displayName }}</span>
-
-          <button
-            @click="toggleGraphPanel"
-            class="p-2 app-text-muted rounded-lg transition-opacity hover:opacity-80"
-            aria-label="Toggle graph panel"
-            title="Toggle graphs"
-          >
-            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" class="w-6 h-6">
-              <path d="M3 3h2v14h16v2H3z"></path>
-              <path d="M7 10h2v7H7z"></path>
-              <path d="M12 7h2v10h-2z"></path>
-              <path d="M17 5h2v12h-2z"></path>
-            </svg>
-          </button>
-
-          <button
-            @click="toggleNotesPanel"
-            :class="[
-              'p-2 rounded-lg transition-opacity hover:opacity-80',
-              notesStore.noteTakingMode ? 'text-green-500' : 'app-text-muted'
-            ]"
-            aria-label="Toggle notes panel"
-            title="Notes"
-          >
-            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" class="w-6 h-6">
-              <path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8l-6-6z"></path>
-              <path d="M14 2v6h6"></path>
-              <path d="M16 13H8M16 17H8M10 9H8" stroke="currentColor" stroke-width="1" fill="none"></path>
-            </svg>
-          </button>
 
           <button
             @click="toggleHistoryPanel"
@@ -73,17 +43,6 @@
           </button>
 
           <button
-            @click="mapStore.toggleMapPanel()"
-            class="p-2 app-text-muted rounded-lg transition-opacity hover:opacity-80"
-            aria-label="Toggle map panel"
-            title="Map"
-          >
-            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" class="w-6 h-6">
-              <path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7zm0 9.5A2.5 2.5 0 1 1 12 6a2.5 2.5 0 0 1 0 5.5z"/>
-            </svg>
-          </button>
-
-          <button
             @click="handleLogout"
             class="p-2 app-text-muted rounded-lg transition-opacity hover:opacity-80"
             aria-label="Log out"
@@ -100,55 +59,82 @@
 
     <!-- Main Content -->
     <main class="flex-1 flex overflow-hidden">
-      <!-- Chat Window -->
+      <!-- Left sidebar: fixed nav rail + resizable content panel -->
+      <div class="flex shrink-0 z-10" :class="navStore.activeModule ? 'shadow-xl' : ''">
+        <NavBar />
+
+        <!-- Active module panel -->
+        <aside
+          v-if="navStore.activeModule === 'graph'"
+          :style="{ width: graphPanelWidth + 'px' }"
+          class="flex min-w-0 transition-[width]"
+        >
+          <div class="flex flex-col flex-1 min-w-0">
+            <GraphPanel />
+          </div>
+          <div
+            class="w-1.5 h-full cursor-col-resize bg-blue-500/20 hover:bg-blue-500/50 transition-colors shrink-0"
+            @mousedown="startResizeGraphPanel"
+            title="Drag to resize"
+          ></div>
+        </aside>
+
+        <aside
+          v-else-if="navStore.activeModule === 'notes'"
+          :style="{ width: notesPanelWidth + 'px' }"
+          class="flex min-w-0 transition-[width]"
+        >
+          <div class="flex flex-col flex-1 min-w-0">
+            <NotesPanel />
+          </div>
+          <div
+            class="w-1.5 h-full cursor-col-resize bg-blue-500/20 hover:bg-blue-500/50 transition-colors shrink-0"
+            @mousedown="startResizeNotesPanel"
+            title="Drag to resize"
+          ></div>
+        </aside>
+
+        <aside
+          v-else-if="navStore.activeModule === 'map'"
+          :style="{ width: mapPanelWidth + 'px' }"
+          class="flex min-w-0 transition-[width]"
+        >
+          <div class="flex flex-col flex-1 min-w-0">
+            <MapPanel />
+          </div>
+          <div
+            class="w-1.5 h-full cursor-col-resize bg-blue-500/20 hover:bg-blue-500/50 transition-colors shrink-0"
+            @mousedown="startResizeMapPanel"
+            title="Drag to resize"
+          ></div>
+        </aside>
+      </div>
+
+      <!-- Chat Window fills remaining space -->
       <div class="flex-1 flex flex-col min-w-0">
         <ChatWindow />
       </div>
 
-      <!-- Graph Panel (Resizable) -->
+      <!-- History Panel — header-launched, right side, resizable -->
       <aside
-        v-if="showGraphPanel"
-        :style="{ width: graphPanelWidth + 'px' }"
+        v-if="showHistoryPanel"
+        :style="{ width: historyPanelWidth + 'px' }"
         class="flex flex-col min-w-0 transition-[width]"
       >
         <div
-          class="w-1 h-full cursor-col-resize app-surface-muted hover:app-surface transition-colors"
-          @mousedown="startResizeGraphPanel"
+          class="w-1 h-full cursor-col-resize app-surface-muted hover:app-surface transition-colors shrink-0"
+          @mousedown="startResizeHistoryPanel"
           title="Drag to resize"
         ></div>
-        <GraphPanel />
+        <HistoryPanel />
       </aside>
 
-      <!-- Config Panel (Sidebar) -->
+      <!-- Config Panel — stays on right, independent of nav bar -->
       <aside
         v-if="showConfigPanel"
         class="w-96 flex flex-col min-w-0"
       >
         <ConfigPanel @close="toggleConfigPanel" />
-      </aside>
-
-      <!-- History Panel -->
-      <aside
-        v-if="showHistoryPanel"
-        class="w-96 flex flex-col min-w-0"
-      >
-        <HistoryPanel />
-      </aside>
-
-      <!-- Notes Panel -->
-      <aside
-        v-if="showNotesPanel"
-        class="w-96 flex flex-col min-w-0"
-      >
-        <NotesPanel />
-      </aside>
-
-      <!-- Map Panel -->
-      <aside
-        v-if="mapStore.showMapPanel"
-        class="w-96 flex flex-col min-w-0"
-      >
-        <MapPanel />
       </aside>
     </main>
   </div>
@@ -162,21 +148,24 @@ import GraphPanel from './components/GraphPanel.vue'
 import HistoryPanel from './components/HistoryPanel.vue'
 import LoginPage from './components/LoginPage.vue'
 import MapPanel from './components/MapPanel.vue'
+import NavBar from './components/NavBar.vue'
 import NotesPanel from './components/NotesPanel.vue'
 import { useChatStore } from './stores/chatStore'
 import { useAuthStore } from './stores/authStore'
+import { useNavStore } from './stores/navStore'
 import { useNotesStore } from './stores/notesStore'
-import { useMapStore } from './stores/mapStore'
 
 const showConfigPanel = ref(false)
-const showGraphPanel = ref(false)
 const showHistoryPanel = ref(false)
-const showNotesPanel = ref(false)
 const graphPanelWidth = ref(384)
+const notesPanelWidth = ref(384)
+const historyPanelWidth = ref(384)
+const mapPanelWidth = ref(384)
+
 const chatStore = useChatStore()
 const authStore = useAuthStore()
+const navStore = useNavStore()
 const notesStore = useNotesStore()
-const mapStore = useMapStore()
 
 const isAuthenticated = computed(() => authStore.isAuthenticated)
 const authLoading = computed(() => authStore.loading)
@@ -186,19 +175,8 @@ const toggleConfigPanel = () => {
   showConfigPanel.value = !showConfigPanel.value
 }
 
-const toggleGraphPanel = () => {
-  showGraphPanel.value = !showGraphPanel.value
-}
-
 const toggleHistoryPanel = () => {
   showHistoryPanel.value = !showHistoryPanel.value
-}
-
-const toggleNotesPanel = () => {
-  showNotesPanel.value = !showNotesPanel.value
-  if (!showNotesPanel.value) {
-    notesStore.exitNoteTakingMode()
-  }
 }
 
 const handleLogout = () => {
@@ -209,11 +187,12 @@ onMounted(async () => {
   await authStore.checkAuth()
 })
 
+// Auto-open Graph panel when new graphs arrive from the agent
 watch(
   () => chatStore.currentGraphs.length,
   (count, prevCount) => {
-    if (count > 0 && count !== prevCount) {
-      showGraphPanel.value = true
+    if (count > 0 && count !== prevCount && navStore.activeModule !== 'graph') {
+      navStore.selectModule('graph')
     }
   }
 )
@@ -224,9 +203,71 @@ const startResizeGraphPanel = (e: MouseEvent) => {
   const startWidth = graphPanelWidth.value
 
   const handleMouseMove = (moveEvent: MouseEvent) => {
-    const delta = startX - moveEvent.clientX
+    // Panel is left-of-chat: dragging handle right expands width
+    const delta = moveEvent.clientX - startX
     const newWidth = Math.max(300, Math.min(800, startWidth + delta))
     graphPanelWidth.value = newWidth
+  }
+
+  const handleMouseUp = () => {
+    document.removeEventListener('mousemove', handleMouseMove)
+    document.removeEventListener('mouseup', handleMouseUp)
+  }
+
+  document.addEventListener('mousemove', handleMouseMove)
+  document.addEventListener('mouseup', handleMouseUp)
+}
+
+const startResizeNotesPanel = (e: MouseEvent) => {
+  e.preventDefault()
+  const startX = e.clientX
+  const startWidth = notesPanelWidth.value
+
+  const handleMouseMove = (moveEvent: MouseEvent) => {
+    const delta = moveEvent.clientX - startX
+    const newWidth = Math.max(300, Math.min(800, startWidth + delta))
+    notesPanelWidth.value = newWidth
+  }
+
+  const handleMouseUp = () => {
+    document.removeEventListener('mousemove', handleMouseMove)
+    document.removeEventListener('mouseup', handleMouseUp)
+  }
+
+  document.addEventListener('mousemove', handleMouseMove)
+  document.addEventListener('mouseup', handleMouseUp)
+}
+
+const startResizeMapPanel = (e: MouseEvent) => {
+  e.preventDefault()
+  const startX = e.clientX
+  const startWidth = mapPanelWidth.value
+
+  const handleMouseMove = (moveEvent: MouseEvent) => {
+    const delta = moveEvent.clientX - startX
+    const newWidth = Math.max(300, Math.min(800, startWidth + delta))
+    mapPanelWidth.value = newWidth
+  }
+
+  const handleMouseUp = () => {
+    document.removeEventListener('mousemove', handleMouseMove)
+    document.removeEventListener('mouseup', handleMouseUp)
+  }
+
+  document.addEventListener('mousemove', handleMouseMove)
+  document.addEventListener('mouseup', handleMouseUp)
+}
+
+const startResizeHistoryPanel = (e: MouseEvent) => {
+  e.preventDefault()
+  const startX = e.clientX
+  const startWidth = historyPanelWidth.value
+
+  const handleMouseMove = (moveEvent: MouseEvent) => {
+    // Panel is right-of-chat: dragging handle left expands width
+    const delta = startX - moveEvent.clientX
+    const newWidth = Math.max(300, Math.min(800, startWidth + delta))
+    historyPanelWidth.value = newWidth
   }
 
   const handleMouseUp = () => {
@@ -249,15 +290,5 @@ body {
   font-family: 'Avenir Next', 'Segoe UI', 'Roboto', sans-serif;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
-}
-
-.theme-select:focus {
-  outline: 2px solid var(--color-accent);
-  outline-offset: 2px;
-}
-
-/* Smooth resize behavior */
-main {
-  transition: none;
 }
 </style>
