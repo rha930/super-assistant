@@ -12,7 +12,7 @@
     <!-- Header -->
     <header class="app-surface border-b app-border px-6 py-4 shadow-sm">
       <div class="w-full flex items-center justify-between">
-        <h1 class="text-2xl font-bold text-left">Super Agent</h1>
+        <h1 class="text-2xl font-bold text-left">AERIAL</h1>
         <div class="flex items-center gap-3">
           <span class="text-sm app-text-muted hidden sm:inline">{{ displayName }}</span>
 

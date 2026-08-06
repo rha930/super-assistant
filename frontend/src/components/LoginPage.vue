@@ -1,7 +1,7 @@
 <template>
   <div class="h-screen flex items-center justify-center app-bg app-text">
     <div class="w-full max-w-sm p-8 app-surface rounded-xl shadow-lg border app-border">
-      <h1 class="text-2xl font-bold text-center mb-6">Super Agent</h1>
+      <h1 class="text-2xl font-bold text-center mb-6">AERIAL</h1>
       <p class="text-sm app-text-muted text-center mb-6">Sign in to continue</p>
 
       <form @submit.prevent="handleLogin" class="space-y-4">
