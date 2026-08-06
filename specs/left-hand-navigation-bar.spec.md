@@ -1,34 +1,35 @@
 # Spec: Left-Hand Navigation Bar for Widget Panels
 
 ## Purpose
-Restructure the app shell so all widget/module panels (Graph, Notes, Chat History, Map) are launched from a vertical navigation bar on the left edge of the screen and open as a panel on the left, with the chat window occupying the remaining space to the right. User identity, Settings, and Log out remain in the top-right of the header.
+Restructure the app shell so most widget/module panels (Graph, Notes, Map) are launched from a vertical navigation bar on the left edge of the screen and open as a panel on the left, with the chat window occupying the remaining space to the right. User identity, Settings, Chat History, and Log out remain in the top-right of the header.
 
 ## Problem Statement
 Today, `frontend/src/App.vue` toggles Graph, Notes, History, Config, and Map panels from a single row of icon buttons in the top-right of the header, and every opened panel renders as an `<aside>` to the right of `ChatWindow` (see the `<main>` block: `ChatWindow` first, followed by `GraphPanel`/`ConfigPanel`/`HistoryPanel`/`NotesPanel`/`MapPanel` asides). As more widgets are added (e.g., the Map panel introduced in `specs/completed/map-view-widget.spec.md`, and the planned database connectors tool in `specs/database-connectors-and-query-tool.spec.md`), the header becomes crowded and there's no consistent, scalable place for module navigation. Users have also indicated a preference for a left-hand navigation pattern (common in dashboard-style apps) with content opening beside the nav rather than stacked on the right of the chat.
 
 ## Goals
-- Introduce a persistent, narrow left-hand navigation bar (icon rail) containing entries for each widget/module: Graph, Notes, Chat History, Map (and any future module panels).
+- Introduce a persistent, narrow left-hand navigation bar (icon rail) containing entries for each widget/module: Graph, Notes, Map (and any future module panels).
 - Clicking a nav bar icon opens that module's panel immediately to the right of the nav bar (left side of the screen), with the chat window filling the remaining space to the right of the open panel.
 - Only one module panel is open at a time when launched from the nav bar (selecting a different module swaps the panel; clicking the active module's icon again closes it), keeping the layout predictable.
-- Keep the header reserved for identity/account-level controls only: display name, Settings (Config), and Log out — remove Graph/Notes/History/Map buttons from the header.
+- Keep the header reserved for identity/account-level controls and Chat History: display name, Chat History, Settings (Config), and Log out — remove Graph/Notes/Map buttons from the header.
 - Preserve all existing panel functionality (Graph resizing, Notes note-taking mode toggle/exit behavior, History conversation list, Map interactivity) with no behavior regressions.
 - Maintain responsive/theme behavior consistent with existing `app-surface`/`app-border`/`app-text` conventions.
 
 ## Non-Goals
 - No change to the Settings/Config panel's trigger location or behavior — it stays in the top-right header, not the left nav bar.
-- No change to the internal implementation of `GraphPanel.vue`, `NotesPanel.vue`, `HistoryPanel.vue`, or `MapPanel.vue` beyond what's needed to fit the new layout container (e.g., removing panel-specific border/positioning classes that assumed a right-side placement).
+- No change to the Chat History panel's trigger location or behavior — it also stays in the top-right header, not the left nav bar, and continues to render as a right-side `<aside>` as it does today.
+- No change to the internal implementation of `GraphPanel.vue`, `NotesPanel.vue`, or `MapPanel.vue` beyond what's needed to fit the new layout container (e.g., removing panel-specific border/positioning classes that assumed a right-side placement).
 - No multi-panel-open-at-once support from the nav bar in this version (e.g., Graph + Map open side by side) — that remains a possible Phase 2 enhancement.
 - No new widgets/modules are introduced by this spec (Database Connectors tool UI, if built, will plug into this nav bar in its own spec/implementation).
-- No changes to authentication, logout, or Settings/Config functionality themselves — only their position is unaffected (they already live in the header).
+- No changes to authentication, logout, Chat History, or Settings/Config functionality themselves — only the nav-bar-driven modules' position changes; Chat History/Settings/Logout keep their current header position and behavior.
 
 ---
 
 ## User Stories
-- As a user, I can see a left-hand icon bar with entries for Graph, Notes, History, and Map at all times while chatting.
+- As a user, I can see a left-hand icon bar with entries for Graph, Notes, and Map at all times while chatting.
 - As a user, I can click a nav bar icon to open that module's panel on the left, with the chat window still visible on the right.
 - As a user, I can click the active module's icon again to close its panel and return to a full-width chat window.
 - As a user, I can click a different module icon while one is open and have the panel swap to the newly selected module without extra clicks.
-- As a user, I still find my display name, Settings, and Log out in the top-right of the header, unchanged in behavior.
+- As a user, I still find my display name, Chat History, Settings, and Log out in the top-right of the header, unchanged in behavior.
 
 ---
 
