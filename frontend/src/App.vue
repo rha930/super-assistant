@@ -73,6 +73,17 @@
           </button>
 
           <button
+            @click="mapStore.toggleMapPanel()"
+            class="p-2 app-text-muted rounded-lg transition-opacity hover:opacity-80"
+            aria-label="Toggle map panel"
+            title="Map"
+          >
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" class="w-6 h-6">
+              <path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7zm0 9.5A2.5 2.5 0 1 1 12 6a2.5 2.5 0 0 1 0 5.5z"/>
+            </svg>
+          </button>
+
+          <button
             @click="handleLogout"
             class="p-2 app-text-muted rounded-lg transition-opacity hover:opacity-80"
             aria-label="Log out"
@@ -131,6 +142,14 @@
       >
         <NotesPanel />
       </aside>
+
+      <!-- Map Panel -->
+      <aside
+        v-if="mapStore.showMapPanel"
+        class="w-96 flex flex-col min-w-0"
+      >
+        <MapPanel />
+      </aside>
     </main>
   </div>
 </template>
@@ -142,10 +161,12 @@ import ConfigPanel from './components/ConfigPanel.vue'
 import GraphPanel from './components/GraphPanel.vue'
 import HistoryPanel from './components/HistoryPanel.vue'
 import LoginPage from './components/LoginPage.vue'
+import MapPanel from './components/MapPanel.vue'
 import NotesPanel from './components/NotesPanel.vue'
 import { useChatStore } from './stores/chatStore'
 import { useAuthStore } from './stores/authStore'
 import { useNotesStore } from './stores/notesStore'
+import { useMapStore } from './stores/mapStore'
 
 const showConfigPanel = ref(false)
 const showGraphPanel = ref(false)
@@ -155,6 +176,7 @@ const graphPanelWidth = ref(384)
 const chatStore = useChatStore()
 const authStore = useAuthStore()
 const notesStore = useNotesStore()
+const mapStore = useMapStore()
 
 const isAuthenticated = computed(() => authStore.isAuthenticated)
 const authLoading = computed(() => authStore.loading)
