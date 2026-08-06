@@ -3,9 +3,10 @@ Flask-CORS==4.0.0
 python-socketio==5.9.0
 python-socketio[client]==5.9.0
 requests==2.32.3
-pydantic==2.5.0
-python-dotenv==1.0.0
+pydantic>=2.7.0
+python-dotenv>=1.0.0
 gunicorn==21.2.0
 redis==5.0.7
 PyJWT>=2.8.0
 bcrypt>=4.0.0
+strands-agents[ollama,gemini]>=1.0,<2
