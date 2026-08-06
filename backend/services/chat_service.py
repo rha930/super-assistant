@@ -2,10 +2,11 @@ import logging
 import uuid
 from typing import Any
 
-from config import GEMINI_API_KEY
+from config import GEMINI_API_KEY, GNEWS_API_KEY
 from models.message import Message
 from services.config_service import get_config_service
 from services.gemini_service import GeminiService
+from services.gnews_service import GNewsService
 from services.graph_artifact_service import GraphArtifactService
 from services.history_repository import ChatHistoryRepository
 from services.history_repository_local import LocalChatHistoryRepository
@@ -37,6 +38,10 @@ class ChatService:
         """Construct a GeminiService from the current config + env API key."""
         return GeminiService(self.config.get("gemini", {}), api_key=GEMINI_API_KEY)
 
+    def _build_gnews_service(self) -> GNewsService:
+        """Construct a GNewsService from the current config + env API key."""
+        return GNewsService(self.config.get("gnews", {}), api_key=GNEWS_API_KEY)
+
     def _invoke_ollama(self, message: str, history: list, context_cfg: dict[str, Any]) -> dict[str, Any]:
         """Invoke the local Ollama agent and normalize the result metadata."""
         params = self.config.get("model_parameters", {})
@@ -52,6 +57,7 @@ class ChatService:
             max_tokens=params.get("max_tokens", 1000),
             context_max_messages=context_cfg.get("max_messages", 12),
             context_max_input_chars=context_cfg.get("max_input_chars", 12000),
+            gnews_service=self._build_gnews_service(),
         )
         metadata = result.get("metadata", {}) or {}
         metadata.setdefault("provider", "ollama")
@@ -79,6 +85,7 @@ class ChatService:
             max_tokens=params.get("max_tokens", 1000),
             context_max_messages=context_cfg.get("max_messages", 12),
             context_max_input_chars=context_cfg.get("max_input_chars", 12000),
+            gnews_service=self._build_gnews_service(),
         ):
             metadata = event.get("metadata", {}) or {}
             metadata.setdefault("provider", "ollama")
