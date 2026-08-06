@@ -1,17 +1,19 @@
 import logging
+import queue
+import threading
 import uuid
+from collections.abc import Generator
 from typing import Any
 
 from config import GEMINI_API_KEY, GNEWS_API_KEY
 from models.message import Message
 from services.config_service import get_config_service
-from services.gemini_service import GeminiService
 from services.gnews_service import GNewsService
-from services.graph_artifact_service import GraphArtifactService
 from services.history_repository import ChatHistoryRepository
 from services.history_repository_local import LocalChatHistoryRepository
 from services.history_repository_redis import RedisChatHistoryRepository
-from services.strands_agent import StrandsAgentService
+from services.strands_provider import build_agent
+from services.strands_tools import build_generate_graph_tool, build_news_search_tool
 
 logger = logging.getLogger(__name__)
 
@@ -22,8 +24,6 @@ class ChatService:
     def __init__(self):
         self.conversations: dict[str, list] = {}
         self.current_conversation_id: str | None = None
-        self.agent = StrandsAgentService()
-        self.graph_artifact_service = GraphArtifactService()
         self.config_service = get_config_service()
         self.config: dict[str, Any] = self.config_service.get_config()
         history_cfg = self.config.get("history_config", {})
@@ -34,66 +34,40 @@ class ChatService:
         self.config = self.config_service.get_config()
         return self.config
 
-    def _build_gemini_service(self) -> GeminiService:
-        """Construct a GeminiService from the current config + env API key."""
-        return GeminiService(self.config.get("gemini", {}), api_key=GEMINI_API_KEY)
-
     def _build_gnews_service(self) -> GNewsService:
-        """Construct a GNewsService from the current config + env API key."""
         return GNewsService(self.config.get("gnews", {}), api_key=GNEWS_API_KEY)
 
-    def _invoke_ollama(self, message: str, history: list, context_cfg: dict[str, Any]) -> dict[str, Any]:
-        """Invoke the local Ollama agent and normalize the result metadata."""
-        params = self.config.get("model_parameters", {})
-        result = self.agent.invoke_agent(
-            agent_id=None,
-            session_id=self.current_conversation_id,
-            user_message=message,
-            system_prompt=self.config.get("system_prompt"),
-            conversation_history=history,
-            model=self.config.get("model"),
-            temperature=params.get("temperature", 0.7),
-            top_p=params.get("top_p", 0.9),
-            max_tokens=params.get("max_tokens", 1000),
-            context_max_messages=context_cfg.get("max_messages", 12),
-            context_max_input_chars=context_cfg.get("max_input_chars", 12000),
-            gnews_service=self._build_gnews_service(),
-        )
-        metadata = result.get("metadata", {}) or {}
-        metadata.setdefault("provider", "ollama")
-        metadata.setdefault("model", self.config.get("model"))
-        result["metadata"] = metadata
-        return result
-
-    def _ollama_stream(
+    def _build_strands_agent(
         self,
-        message: str,
+        provider: str,
         history: list,
-        context_cfg: dict[str, Any],
-        fallback: bool = False,
+        artifact_store: list,
+        callback_handler,
     ):
-        """Yield Ollama stream events, tagging provider (and fallback) metadata."""
-        params = self.config.get("model_parameters", {})
-        model = self.config.get("model")
-        for event in self.agent.stream_agent(
-            user_message=message,
-            system_prompt=self.config.get("system_prompt"),
-            conversation_history=history,
-            model=model,
-            temperature=params.get("temperature", 0.7),
-            top_p=params.get("top_p", 0.9),
-            max_tokens=params.get("max_tokens", 1000),
-            context_max_messages=context_cfg.get("max_messages", 12),
-            context_max_input_chars=context_cfg.get("max_input_chars", 12000),
-            gnews_service=self._build_gnews_service(),
-        ):
-            metadata = event.get("metadata", {}) or {}
-            metadata.setdefault("provider", "ollama")
-            metadata.setdefault("model", model)
-            if fallback:
-                metadata["fallback_from"] = "gemini"
-            event["metadata"] = metadata
-            yield event
+        """Build a Strands Agent for this request with the configured provider and tools."""
+        gnews = self._build_gnews_service()
+        tools = [
+            build_news_search_tool(gnews),
+            build_generate_graph_tool(artifact_store),
+        ]
+        return build_agent(
+            provider=provider,
+            config=self.config,
+            tools=tools,
+            history=history,
+            callback_handler=callback_handler,
+            gemini_api_key=GEMINI_API_KEY,
+        )
+
+    @staticmethod
+    def _extract_text_from_result(result) -> str:
+        """Extract plain text from a Strands AgentResult."""
+        try:
+            message = result.message or {}
+            content = message.get("content", [])
+            return "".join(block.get("text", "") for block in content if "text" in block)
+        except Exception:
+            return str(result)
 
     def _build_history_repo(self, history_cfg: dict[str, Any]) -> ChatHistoryRepository:
         backend_type = str(history_cfg.get("backend_type", "local")).strip().lower()
@@ -127,24 +101,13 @@ class ChatService:
         conversation_id: str | None = None,
         user_id: str = "anonymous",
     ) -> dict[str, Any]:
-        """
-        Process a user message and get a response from the Strands agent.
-
-        Args:
-            message: User message
-            conversation_id: Optional conversation ID
-
-        Returns:
-            Dictionary with agent response and metadata
-        """
+        """Process a user message and return the agent's full response."""
         try:
             self._refresh_config()
 
-            # Use existing or create new conversation ID
             if not conversation_id:
                 conversation_id = f"conv_{uuid.uuid4().hex}"
 
-            # Store user message
             user_msg = Message(role="user", content=message)
             self.history_repo.append_message(
                 user_id=user_id,
@@ -156,82 +119,45 @@ class ChatService:
 
             history = self._build_context_history(user_id, conversation_id)
             context_cfg = self.config.get("context_config", {})
-
             provider = (self.config.get("provider") or "ollama").strip().lower()
-            gemini = self._build_gemini_service()
-            params = self.config.get("model_parameters", {})
 
-            if provider == "gemini" and gemini.is_available():
-                logger.info(
-                    "Routing generation to Gemini (model=%s)",
-                    self.config.get("model"),
-                )
-                try:
-                    result = gemini.generate(
-                        user_message=message,
-                        system_prompt=self.config.get("system_prompt"),
-                        conversation_history=history,
-                        model=self.config.get("model"),
-                        temperature=params.get("temperature", 0.7),
-                        top_p=params.get("top_p", 0.9),
-                        max_tokens=params.get("max_tokens", 1000),
-                    )
-                    agent_response = result.get("content", "")
-                    agent_result = {
-                        "response": agent_response,
-                        "metadata": {
-                            "provider": "gemini",
-                            "model": result.get("model"),
-                            "tool_calls": [],
-                            "usage": result.get("usage"),
-                        },
-                    }
-                except Exception as gemini_err:
-                    logger.error(
-                        "Gemini generation failed, falling back to Ollama: %s",
-                        gemini_err,
-                    )
-                    try:
-                        agent_result = self._invoke_ollama(message, history, context_cfg)
-                        agent_result["metadata"]["fallback_from"] = "gemini"
-                    except Exception:
-                        logger.error("Ollama fallback also failed; re-raising original Gemini error")
-                        raise RuntimeError(f"Gemini error: {gemini_err}") from gemini_err
-            else:
-                if provider == "gemini":
-                    logger.warning("Provider is 'gemini' but it is unavailable (enabled/API key missing); using Ollama")
-                agent_result = self._invoke_ollama(message, history, context_cfg)
+            artifact_store: list = []
+            tool_calls_collected: list = []
 
-            agent_response = agent_result.get("response", "")
-            agent_tool_calls = agent_result.get("metadata", {}).get("tool_calls", [])
+            def _cb(**event: Any) -> None:
+                if "current_tool_use" in event:
+                    tuse = event.get("current_tool_use") or {}
+                    name = tuse.get("name") if isinstance(tuse, dict) else None
+                    if name:
+                        tool_calls_collected.append({"name": name, "status": "success"})
 
-            # Only generate graph artifacts if user message indicates visualization intent
-            artifacts = []
-            if self.agent._wants_visualization(message):
-                artifacts = self.graph_artifact_service.create_graph_artifacts(message, agent_response)
+            agent = self._build_strands_agent(provider, history, artifact_store, _cb)
+            sdk_result = agent(message)
+
+            agent_response = self._extract_text_from_result(sdk_result)
+            artifacts = list(artifact_store)
 
             logger.info(
-                "Graph artifacts generated (sync): conversation_id=%s count=%s intent=%s",
+                "Strands agent completed (sync): conversation_id=%s artifacts=%s tools=%s",
                 conversation_id,
                 len(artifacts),
-                self.agent._wants_visualization(message),
+                len(tool_calls_collected),
             )
+
             context_meta = {
                 "history_message_count": len(history),
                 "context_max_messages": context_cfg.get("max_messages", 12),
                 "context_max_input_chars": context_cfg.get("max_input_chars", 12000),
             }
+            agent_metadata = {
+                "provider": provider,
+                "model": self.config.get("model"),
+                "tool_calls": tool_calls_collected,
+                "artifacts": artifacts,
+                "context": context_meta,
+            }
 
-            agent_msg = Message(
-                role="agent",
-                content=agent_response,
-                metadata={
-                    **agent_result.get("metadata", {"tokens_used": 0, "tool_calls": []}),
-                    "tool_calls": agent_tool_calls,
-                    "artifacts": artifacts,
-                    "context": context_meta,
-                },
-            )
+            agent_msg = Message(role="agent", content=agent_response, metadata=agent_metadata)
             self.history_repo.append_message(
                 user_id=user_id,
                 conversation_id=conversation_id,
@@ -280,70 +206,88 @@ class ChatService:
         message: str,
         conversation_id: str | None = None,
         user_id: str = "anonymous",
-    ):
-        """Yield response chunks from the model and keep conversation state."""
+    ) -> Generator[dict[str, Any], None, None]:
+        """Yield SSE-compatible response chunks from the Strands agent."""
         try:
             self._refresh_config()
             cid = self.start_conversation(message, conversation_id, user_id)
             history = self._build_context_history(user_id, cid)
             context_cfg = self.config.get("context_config", {})
-            params = self.config.get("model_parameters", {})
-
             provider = (self.config.get("provider") or "ollama").strip().lower()
-            gemini = self._build_gemini_service()
 
-            if provider == "gemini" and gemini.is_available():
-                logger.info(
-                    "Routing streaming generation to Gemini (model=%s)",
-                    self.config.get("model"),
-                )
+            artifact_store: list = []
+            tool_calls_tracking: list = []
+            event_queue: queue.Queue = queue.Queue()
+
+            def _cb(**event: Any) -> None:
+                if "data" in event and event["data"]:
+                    event_queue.put({
+                        "chunk": event["data"],
+                        "done": False,
+                        "tool_calls": list(tool_calls_tracking),
+                    })
+                elif "current_tool_use" in event:
+                    tuse = event.get("current_tool_use") or {}
+                    name = tuse.get("name") if isinstance(tuse, dict) else None
+                    if name:
+                        tool_calls_tracking.append({"name": name, "status": "in_progress"})
+                        event_queue.put({
+                            "chunk": "",
+                            "done": False,
+                            "thinking": f"Using {name}...",
+                            "tool_calls": list(tool_calls_tracking),
+                        })
+                elif "result" in event:
+                    for tc in tool_calls_tracking:
+                        tc["status"] = "success"
+                    event_queue.put({
+                        "chunk": "",
+                        "done": True,
+                        "tool_calls": list(tool_calls_tracking),
+                        "artifacts": list(artifact_store),
+                        "provider": provider,
+                        "model": self.config.get("model"),
+                    })
+
+            agent = self._build_strands_agent(provider, history, artifact_store, _cb)
+
+            def _run_agent() -> None:
                 try:
-                    stream = gemini.stream_generate(
-                        user_message=message,
-                        system_prompt=self.config.get("system_prompt"),
-                        conversation_history=history,
-                        model=self.config.get("model"),
-                        temperature=params.get("temperature", 0.7),
-                        top_p=params.get("top_p", 0.9),
-                        max_tokens=params.get("max_tokens", 1000),
-                    )
-                    # Materialize so a failure surfaces before we start yielding.
-                    stream = list(stream)
-                except Exception as gemini_err:
-                    logger.error("Gemini stream failed, falling back to Ollama: %s", gemini_err)
-                    try:
-                        stream = list(self._ollama_stream(message, history, context_cfg, fallback=True))
-                    except Exception:
-                        logger.error("Ollama fallback also failed; re-raising original Gemini error")
-                        raise RuntimeError(f"Gemini error: {gemini_err}") from gemini_err
-            else:
-                if provider == "gemini":
-                    logger.warning("Provider is 'gemini' but it is unavailable (enabled/API key missing); using Ollama")
-                stream = self._ollama_stream(message, history, context_cfg)
+                    agent(message)
+                except Exception as exc:
+                    logger.error("Strands agent error in stream: %s", exc)
+                    event_queue.put({"error": str(exc), "done": True})
+                finally:
+                    event_queue.put(None)  # sentinel
 
-            for event in stream:
-                metadata = event.get("metadata", {"tool_calls": []})
-                done = event.get("done", False)
+            threading.Thread(target=_run_agent, daemon=True).start()
 
-                if done:
-                    metadata = {
-                        **metadata,
-                        "tool_calls": metadata.get("tool_calls", []),
-                        "artifacts": [],
-                    }
+            context_meta = {
+                "history_message_count": len(history),
+                "context_max_messages": context_cfg.get("max_messages", 12),
+                "context_max_input_chars": context_cfg.get("max_input_chars", 12000),
+            }
 
+            while True:
+                item = event_queue.get()
+                if item is None:
+                    break
+                if "error" in item:
+                    raise RuntimeError(item["error"])
+
+                done = item.get("done", False)
                 yield {
                     "conversation_id": cid,
-                    "chunk": event.get("chunk", ""),
+                    "chunk": item.get("chunk", ""),
                     "done": done,
                     "metadata": {
-                        **metadata,
-                        "context": {
-                            "history_message_count": len(history),
-                            "context_max_messages": context_cfg.get("max_messages", 12),
-                            "context_max_input_chars": context_cfg.get("max_input_chars", 12000),
-                        },
+                        "tool_calls": item.get("tool_calls", []),
+                        "artifacts": item.get("artifacts", []),
+                        "provider": item.get("provider", provider),
+                        "model": item.get("model", self.config.get("model")),
+                        "context": context_meta,
                     },
+                    **({"thinking": item["thinking"]} if "thinking" in item else {}),
                 }
 
         except Exception as e:
@@ -357,26 +301,9 @@ class ChatService:
         metadata: dict[str, Any] | None = None,
         user_id: str = "anonymous",
     ):
-        """Persist final streamed assistant message to history."""
-        conversation_messages = self.history_repo.get_messages(user_id, conversation_id)
-        user_prompt = ""
-        if conversation_messages:
-            for msg in reversed(conversation_messages):
-                if msg.get("role") == "user":
-                    user_prompt = msg.get("content", "")
-                    break
-
-        # Only generate graph artifacts if user message indicates visualization intent
-        artifacts = []
-        if self.agent._wants_visualization(user_prompt):
-            artifacts = self.graph_artifact_service.create_graph_artifacts(user_prompt, content)
-
-        logger.info(
-            "Graph artifacts generated (stream): conversation_id=%s count=%s intent=%s",
-            conversation_id,
-            len(artifacts),
-            self.agent._wants_visualization(user_prompt),
-        )
+        """Persist the completed streamed assistant message to history."""
+        # Artifacts were collected by generate_graph tool during the stream
+        artifacts = (metadata or {}).get("artifacts", [])
 
         agent_msg = Message(
             role="agent",
@@ -390,7 +317,6 @@ class ChatService:
             content=content,
             metadata=agent_msg.metadata,
         )
-
         return artifacts
 
     def get_history(self, conversation_id: str, user_id: str = "anonymous") -> list:

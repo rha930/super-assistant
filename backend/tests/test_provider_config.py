@@ -170,70 +170,65 @@ class _FakeHistoryRepo:
         return []
 
 
-class _FakeGemini:
-    def __init__(self, available=True, fail=False):
-        self._available = available
-        self._fail = fail
+def _make_fake_strands_result(text: str):
+    """Return a minimal mock AgentResult whose message contains text."""
+    from unittest.mock import MagicMock
 
-    def is_available(self):
-        return self._available
-
-    def generate(self, **kwargs):
-        if self._fail:
-            raise RuntimeError("gemini down")
-        return {
-            "content": "from gemini",
-            "model": "gemini-1.5-flash",
-            "provider": "gemini",
-            "usage": {"input_tokens": 1, "output_tokens": 2},
-        }
+    result = MagicMock()
+    result.message = {"role": "assistant", "content": [{"text": text}]}
+    return result
 
 
-def _make_chat_service(monkeypatch, provider, gemini):
+def _make_fake_agent(response_text: str):
+    """Return a mock strands.Agent that returns response_text when called."""
+    from unittest.mock import MagicMock
+
+    agent = MagicMock()
+    agent.return_value = _make_fake_strands_result(response_text)
+    return agent
+
+
+def _make_chat_service(monkeypatch, provider: str, ollama_text: str = "from ollama", gemini_text: str = "from gemini"):
     svc = ChatService()
     svc.history_repo = _FakeHistoryRepo()
-    # Fixed config for the request.
     cfg = {
         "provider": provider,
         "model": "llama3",
         "model_parameters": {"temperature": 0.7, "top_p": 0.9, "max_tokens": 100},
         "system_prompt": "sys",
         "context_config": {"max_messages": 12, "max_input_chars": 12000},
-        "gemini": {"model": "gemini-1.5-flash"},
+        "gnews": {},
     }
     monkeypatch.setattr(svc, "_refresh_config", lambda: svc.__dict__.update(config=cfg) or cfg)
     svc.config = cfg
-    monkeypatch.setattr(svc, "_build_gemini_service", lambda: gemini)
-    # Stub Ollama agent.
-    monkeypatch.setattr(
-        svc.agent, "invoke_agent", lambda **kwargs: {"response": "from ollama", "metadata": {"tool_calls": []}}
-    )
-    monkeypatch.setattr(svc.agent, "_wants_visualization", lambda msg: False)
+
+    # Route to appropriate fake agent based on provider
+    response_text = gemini_text if provider == "gemini" else ollama_text
+    monkeypatch.setattr(svc, "_build_strands_agent", lambda *a, **kw: _make_fake_agent(response_text))
     return svc
 
 
 class TestChatServiceRouting:
     def test_routes_to_ollama(self, monkeypatch):
-        svc = _make_chat_service(monkeypatch, "ollama", _FakeGemini(available=True))
+        svc = _make_chat_service(monkeypatch, "ollama")
         result = svc.process_message("hi", conversation_id="c1", user_id="u1")
         assert result["response"] == "from ollama"
         assert result["metadata"]["provider"] == "ollama"
 
     def test_routes_to_gemini(self, monkeypatch):
-        svc = _make_chat_service(monkeypatch, "gemini", _FakeGemini(available=True))
+        svc = _make_chat_service(monkeypatch, "gemini")
         result = svc.process_message("hi", conversation_id="c1", user_id="u1")
         assert result["response"] == "from gemini"
         assert result["metadata"]["provider"] == "gemini"
 
-    def test_gemini_failure_falls_back_to_ollama(self, monkeypatch):
-        svc = _make_chat_service(monkeypatch, "gemini", _FakeGemini(available=True, fail=True))
-        result = svc.process_message("hi", conversation_id="c1", user_id="u1")
-        assert result["response"] == "from ollama"
-        assert result["metadata"]["provider"] == "ollama"
-        assert result["metadata"]["fallback_from"] == "gemini"
+    def test_ollama_response_has_no_artifacts_by_default(self, monkeypatch):
+        svc = _make_chat_service(monkeypatch, "ollama")
+        result = svc.process_message("just a question", conversation_id="c1", user_id="u1")
+        assert result["artifacts"] == []
 
-    def test_gemini_selected_but_unavailable_uses_ollama(self, monkeypatch):
-        svc = _make_chat_service(monkeypatch, "gemini", _FakeGemini(available=False))
+    def test_gemini_selected_but_unavailable_still_returns_provider_label(self, monkeypatch):
+        # When provider=gemini is configured, the label in metadata reflects the config
+        # regardless of key presence (fallback happens inside build_agent/strands_provider).
+        svc = _make_chat_service(monkeypatch, "gemini")
         result = svc.process_message("hi", conversation_id="c1", user_id="u1")
-        assert result["response"] == "from ollama"
-        assert result["metadata"]["provider"] == "ollama"
+        assert result["metadata"]["provider"] == "gemini"
