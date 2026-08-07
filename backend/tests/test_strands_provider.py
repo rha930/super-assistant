@@ -14,8 +14,9 @@ class TestBuildAgent:
         }
 
     def test_ollama_provider_builds_ollama_model(self):
-        from services.strands_provider import build_agent
         from strands.models.ollama import OllamaModel
+
+        from services.strands_provider import build_agent
 
         agent = build_agent(
             provider="ollama",
@@ -28,8 +29,9 @@ class TestBuildAgent:
         assert isinstance(agent.model, OllamaModel)
 
     def test_gemini_provider_builds_gemini_model(self):
-        from services.strands_provider import build_agent
         from strands.models.gemini import GeminiModel
+
+        from services.strands_provider import build_agent
 
         agent = build_agent(
             provider="gemini",
@@ -43,8 +45,9 @@ class TestBuildAgent:
         assert isinstance(agent.model, GeminiModel)
 
     def test_gemini_without_key_falls_back_to_ollama(self):
-        from services.strands_provider import build_agent
         from strands.models.ollama import OllamaModel
+
+        from services.strands_provider import build_agent
 
         agent = build_agent(
             provider="gemini",

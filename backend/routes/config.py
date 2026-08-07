@@ -1,6 +1,7 @@
 import logging
 
 from flask import Blueprint, request
+
 from models.response import ErrorResponse, SuccessResponse
 from services.config_service import get_config_service
 

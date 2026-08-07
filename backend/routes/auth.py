@@ -2,6 +2,7 @@ import logging
 import re
 
 from flask import Blueprint, request
+
 from middleware.auth import require_auth
 from models.response import ErrorResponse, SuccessResponse
 

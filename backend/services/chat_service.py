@@ -7,7 +7,6 @@ from typing import Any
 
 from config import GEMINI_API_KEY, GNEWS_API_KEY
 from models.message import Message
-
 from services.config_service import get_config_service
 from services.gnews_service import GNewsService
 from services.history_repository import ChatHistoryRepository

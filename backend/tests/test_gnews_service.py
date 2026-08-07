@@ -4,6 +4,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 import requests
+
 from services.gnews_service import GNewsService
 
 GNEWS_CONFIG = {
