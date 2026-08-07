@@ -221,33 +221,39 @@ class ChatService:
 
             def _cb(**event: Any) -> None:
                 if "data" in event and event["data"]:
-                    event_queue.put({
-                        "chunk": event["data"],
-                        "done": False,
-                        "tool_calls": list(tool_calls_tracking),
-                    })
+                    event_queue.put(
+                        {
+                            "chunk": event["data"],
+                            "done": False,
+                            "tool_calls": list(tool_calls_tracking),
+                        }
+                    )
                 elif "current_tool_use" in event:
                     tuse = event.get("current_tool_use") or {}
                     name = tuse.get("name") if isinstance(tuse, dict) else None
                     if name:
                         tool_calls_tracking.append({"name": name, "status": "in_progress"})
-                        event_queue.put({
-                            "chunk": "",
-                            "done": False,
-                            "thinking": f"Using {name}...",
-                            "tool_calls": list(tool_calls_tracking),
-                        })
+                        event_queue.put(
+                            {
+                                "chunk": "",
+                                "done": False,
+                                "thinking": f"Using {name}...",
+                                "tool_calls": list(tool_calls_tracking),
+                            }
+                        )
                 elif "result" in event:
                     for tc in tool_calls_tracking:
                         tc["status"] = "success"
-                    event_queue.put({
-                        "chunk": "",
-                        "done": True,
-                        "tool_calls": list(tool_calls_tracking),
-                        "artifacts": list(artifact_store),
-                        "provider": provider,
-                        "model": self.config.get("model"),
-                    })
+                    event_queue.put(
+                        {
+                            "chunk": "",
+                            "done": True,
+                            "tool_calls": list(tool_calls_tracking),
+                            "artifacts": list(artifact_store),
+                            "provider": provider,
+                            "model": self.config.get("model"),
+                        }
+                    )
 
             agent = self._build_strands_agent(provider, history, artifact_store, _cb)
 

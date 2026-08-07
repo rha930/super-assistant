@@ -56,11 +56,7 @@ def build_news_search_tool(gnews_service: Any):
             published = str(article.get("published_at", "")).strip()
             description = str(article.get("description", "")).strip()
             url = str(article.get("url", "")).strip()
-            lines.append(
-                f"{i}. {title} — {source} ({published})\n"
-                f"   {description}\n"
-                f"   {url}"
-            )
+            lines.append(f"{i}. {title} — {source} ({published})\n   {description}\n   {url}")
         return "\n".join(lines)
 
     return strands_tool(news_search)
@@ -90,10 +86,7 @@ def build_generate_graph_tool(artifact_store: list):
         Returns a confirmation string on success or an error description.
         """
         if chart_type not in _ALLOWED_CHART_TYPES:
-            return (
-                f"Invalid chart_type '{chart_type}'. "
-                f"Must be one of: {', '.join(sorted(_ALLOWED_CHART_TYPES))}."
-            )
+            return f"Invalid chart_type '{chart_type}'. Must be one of: {', '.join(sorted(_ALLOWED_CHART_TYPES))}."
 
         if len(series_json.encode()) > _MAX_SERIES_JSON_BYTES:
             return "series_json exceeds the maximum allowed size (8 KB)."

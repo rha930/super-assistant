@@ -1,8 +1,6 @@
 """Unit tests for strands_provider.build_agent()."""
 
 
-
-
 class TestBuildAgent:
     """Tests for build_agent() provider selection and fallback."""
 
@@ -125,11 +123,13 @@ class TestHistoryToStrandsMessages:
     def test_skips_empty_content(self):
         from services.strands_provider import _history_to_strands_messages
 
-        result = _history_to_strands_messages([
-            {"role": "user", "content": ""},
-            {"role": "user", "content": "  "},
-            {"role": "user", "content": "Real message"},
-        ])
+        result = _history_to_strands_messages(
+            [
+                {"role": "user", "content": ""},
+                {"role": "user", "content": "  "},
+                {"role": "user", "content": "Real message"},
+            ]
+        )
 
         assert len(result) == 1
         assert result[0]["content"][0]["text"] == "Real message"
