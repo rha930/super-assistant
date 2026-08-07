@@ -1,5 +1,5 @@
 <template>
-  <div class="h-full flex flex-col app-surface border-l app-border">
+  <div class="h-full flex flex-col app-surface border-r app-border">
     <!-- Header -->
     <div class="flex items-center justify-between p-4 border-b app-border">
       <h2 class="text-lg font-semibold app-text">Graphs</h2>

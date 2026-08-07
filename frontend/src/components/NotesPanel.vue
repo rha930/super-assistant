@@ -1,5 +1,5 @@
 <template>
-  <div class="flex flex-col h-full app-surface border-l app-border">
+  <div class="flex flex-col h-full app-surface border-r app-border">
     <!-- Header -->
     <div class="px-4 py-3 border-b app-border flex items-center justify-between">
       <div class="flex items-center gap-2">

@@ -1,5 +1,5 @@
 <template>
-  <div class="flex flex-col h-full app-surface border-l app-border">
+  <div class="flex flex-col h-full app-surface border-r app-border">
     <!-- Header -->
     <div class="px-4 py-3 border-b app-border flex items-center justify-between shrink-0">
       <h2 class="text-lg font-semibold app-text">Map</h2>
@@ -38,6 +38,7 @@ import { useMapStore } from '../stores/mapStore'
 const mapStore = useMapStore()
 const mapContainer = ref<HTMLElement | null>(null)
 let map: any = null
+let resizeObserver: ResizeObserver | null = null
 
 function resetView() {
   mapStore.resetView()
@@ -74,6 +75,10 @@ onMounted(async () => {
 
   map.invalidateSize()
 
+  // Re-render tiles whenever the panel is resized
+  resizeObserver = new ResizeObserver(() => map?.invalidateSize())
+  resizeObserver.observe(mapContainer.value)
+
   map.on('moveend zoomend', () => {
     if (!map) return
     const c = map.getCenter()
@@ -82,6 +87,8 @@ onMounted(async () => {
 })
 
 onBeforeUnmount(() => {
+  resizeObserver?.disconnect()
+  resizeObserver = null
   map?.remove()
   map = null
 })

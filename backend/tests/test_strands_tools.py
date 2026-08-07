@@ -3,10 +3,7 @@
 import json
 from unittest.mock import MagicMock
 
-import pytest
-
 from services.strands_tools import build_generate_graph_tool, build_news_search_tool
-
 
 # ---------------------------------------------------------------------------
 # news_search tool
