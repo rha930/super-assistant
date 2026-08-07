@@ -32,11 +32,15 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted, onBeforeUnmount, nextTick } from 'vue'
+import { ref, watch, onMounted, onBeforeUnmount, nextTick } from 'vue'
 import type { MapPoint } from '../stores/mapStore'
 import { useMapStore } from '../stores/mapStore'
+import { useChatStore } from '../stores/chatStore'
+import { useNavStore } from '../stores/navStore'
 
 const mapStore = useMapStore()
+const chatStore = useChatStore()
+const navStore = useNavStore()
 const mapContainer = ref<HTMLElement | null>(null)
 let map: any = null
 let resizeObserver: ResizeObserver | null = null
@@ -204,4 +208,20 @@ onBeforeUnmount(() => {
   map?.remove()
   map = null
 })
+
+// Fly to location when the agent emits a map_action artifact
+watch(
+  () => chatStore.pendingMapAction,
+  (action) => {
+    if (!action || action.action !== 'fly_to') return
+    if (navStore.activeModule !== 'map') {
+      navStore.selectModule('map')
+    }
+    nextTick(() => {
+      map?.flyTo([action.lat, action.lng], action.zoom)
+      mapStore.setView([action.lat, action.lng], action.zoom)
+      chatStore.clearPendingMapAction()
+    })
+  },
+)
 </script>

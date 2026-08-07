@@ -14,6 +14,14 @@ interface ConversationSummary {
   preview: string
 }
 
+export interface MapAction {
+  action: 'fly_to'
+  lat: number
+  lng: number
+  zoom: number
+  place_name: string
+}
+
 export const useChatStore = defineStore('chat', () => {
   const messages = ref<Message[]>([])
   const currentConversationId = ref<string>('')
@@ -22,6 +30,7 @@ export const useChatStore = defineStore('chat', () => {
   const isLoadingConversations = ref<boolean>(false)
   const graphsByConversationId = ref<Map<string, GraphPayload[]>>(new Map())
   const selectedGraphIdByConversationId = ref<Map<string, string>>(new Map())
+  const pendingMapAction = ref<MapAction | null>(null)
   const uiStore = useUIStore()
 
   const addMessage = (message: Message) => {
@@ -73,6 +82,14 @@ export const useChatStore = defineStore('chat', () => {
     if (currentGraphs.value.some((g) => g.id === graphId)) {
       selectedGraphIdByConversationId.value.set(currentConversationId.value, graphId)
     }
+  }
+
+  const setPendingMapAction = (action: MapAction) => {
+    pendingMapAction.value = action
+  }
+
+  const clearPendingMapAction = () => {
+    pendingMapAction.value = null
   }
 
   const sendMessage = async (content: string) => {
@@ -179,6 +196,12 @@ export const useChatStore = defineStore('chat', () => {
               if (graphs.length > 0) {
                 addGraphs(graphs)
               }
+              // Route map_action artifacts
+              for (const artifact of artifactSource) {
+                if (artifact?.type === 'map_action' && artifact.action === 'fly_to') {
+                  setPendingMapAction(artifact as MapAction)
+                }
+              }
             }
             uiStore.clearThinking()
           }
@@ -246,6 +269,7 @@ export const useChatStore = defineStore('chat', () => {
     currentGraphs,
     selectedGraphId,
     selectedGraph,
+    pendingMapAction,
     addMessage,
     updateMessage,
     sendMessage,
@@ -253,6 +277,8 @@ export const useChatStore = defineStore('chat', () => {
     loadHistory,
     loadConversations,
     addGraphs,
-    selectGraph
+    selectGraph,
+    setPendingMapAction,
+    clearPendingMapAction,
   }
 })

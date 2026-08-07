@@ -60,4 +60,18 @@ describe('chatStore', () => {
     const store = useChatStore()
     expect(store.currentGraphs).toEqual([])
   })
+
+  it('setPendingMapAction stores the action', () => {
+    const store = useChatStore()
+    const action = { action: 'fly_to' as const, lat: 51.5, lng: -0.1, zoom: 10, place_name: 'London' }
+    store.setPendingMapAction(action)
+    expect(store.pendingMapAction).toEqual(action)
+  })
+
+  it('clearPendingMapAction resets pendingMapAction to null', () => {
+    const store = useChatStore()
+    store.setPendingMapAction({ action: 'fly_to', lat: 0, lng: 0, zoom: 5, place_name: 'Test' })
+    store.clearPendingMapAction()
+    expect(store.pendingMapAction).toBeNull()
+  })
 })

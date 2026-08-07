@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest'
 import { mount, flushPromises } from '@vue/test-utils'
-import { setActivePinia, createPinia } from 'pinia'
+import { createPinia, setActivePinia } from 'pinia'
 
 // Provide window.L (CDN global) before the component is imported.
 const mockMarkerInstance = {
@@ -15,6 +15,7 @@ const mockMarkerInstance = {
 }
 const mockMapInstance = {
   setView: vi.fn().mockReturnThis(),
+  flyTo: vi.fn().mockReturnThis(),
   on: vi.fn().mockReturnThis(),
   remove: vi.fn(),
   invalidateSize: vi.fn(),
@@ -43,6 +44,7 @@ const mockL = {
 
 import MapPanel from '../components/MapPanel.vue'
 import { useMapStore } from '../stores/mapStore'
+import { useChatStore } from '../stores/chatStore'
 
 describe('MapPanel.vue', () => {
   beforeEach(() => {
@@ -93,6 +95,21 @@ describe('MapPanel.vue', () => {
     // L.marker should have been called once for the restored point
     expect(mockL.marker).toHaveBeenCalledTimes(1)
     expect(mockL.marker).toHaveBeenCalledWith([48.8, 2.3])
+  })
+
+  it('calls map.flyTo when pendingMapAction is set after mount', async () => {
+    const pinia = createPinia()
+    setActivePinia(pinia)
+    const chatStore = useChatStore()
+
+    mount(MapPanel, { global: { plugins: [pinia] } })
+    await flushPromises()
+
+    chatStore.setPendingMapAction({ action: 'fly_to', lat: 51.5, lng: -0.1, zoom: 10, place_name: 'London' })
+    await flushPromises()
+
+    expect(mockMapInstance.flyTo).toHaveBeenCalledWith([51.5, -0.1], 10)
+    expect(chatStore.pendingMapAction).toBeNull()
   })
 })
 
