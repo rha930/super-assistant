@@ -17,6 +17,12 @@ const mockL = {
 }
 ;(globalThis as any).L = mockL
 
+// jsdom doesn't implement ResizeObserver
+;(globalThis as any).ResizeObserver = class {
+  observe() {}
+  disconnect() {}
+}
+
 import MapPanel from '../components/MapPanel.vue'
 
 describe('MapPanel.vue', () => {

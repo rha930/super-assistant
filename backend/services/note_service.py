@@ -2,6 +2,7 @@ import logging
 from typing import Any
 
 from config import GEMINI_API_KEY, NOTE_EXPANSION_SYSTEM_PROMPT
+
 from services.config_service import get_config_service
 from services.gemini_service import GeminiService
 from services.note_repository import NoteRepository

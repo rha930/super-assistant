@@ -1,8 +1,6 @@
 """Unit tests for strands_provider.build_agent()."""
 
-from unittest.mock import MagicMock, patch
 
-import pytest
 
 
 class TestBuildAgent:
@@ -16,9 +14,8 @@ class TestBuildAgent:
         }
 
     def test_ollama_provider_builds_ollama_model(self):
-        from strands.models.ollama import OllamaModel
-
         from services.strands_provider import build_agent
+        from strands.models.ollama import OllamaModel
 
         agent = build_agent(
             provider="ollama",
@@ -31,9 +28,8 @@ class TestBuildAgent:
         assert isinstance(agent.model, OllamaModel)
 
     def test_gemini_provider_builds_gemini_model(self):
-        from strands.models.gemini import GeminiModel
-
         from services.strands_provider import build_agent
+        from strands.models.gemini import GeminiModel
 
         agent = build_agent(
             provider="gemini",
@@ -47,9 +43,8 @@ class TestBuildAgent:
         assert isinstance(agent.model, GeminiModel)
 
     def test_gemini_without_key_falls_back_to_ollama(self):
-        from strands.models.ollama import OllamaModel
-
         from services.strands_provider import build_agent
+        from strands.models.ollama import OllamaModel
 
         agent = build_agent(
             provider="gemini",

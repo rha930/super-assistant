@@ -2,9 +2,8 @@ import logging
 import re
 
 import requests
-from flask import Blueprint
-
 from config import OLLAMA_BASE_URL, OLLAMA_MODEL
+from flask import Blueprint
 from models.response import ErrorResponse, SuccessResponse
 
 logger = logging.getLogger(__name__)

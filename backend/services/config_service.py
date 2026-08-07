@@ -3,6 +3,7 @@ import logging
 from typing import Any
 
 from config import AGENT_MODEL, DEFAULT_CONFIG, GEMINI_API_KEY, OLLAMA_MODEL
+
 from services.gemini_service import GeminiService
 
 logger = logging.getLogger(__name__)

@@ -1,7 +1,6 @@
 import logging
 
 from flask import Blueprint, g, request
-
 from middleware.auth import require_auth
 from models.response import ErrorResponse, SuccessResponse
 from services.note_service import NoteService
