@@ -38,6 +38,7 @@ import { useMapStore } from '../stores/mapStore'
 const mapStore = useMapStore()
 const mapContainer = ref<HTMLElement | null>(null)
 let map: any = null
+let resizeObserver: ResizeObserver | null = null
 
 function resetView() {
   mapStore.resetView()
@@ -74,6 +75,10 @@ onMounted(async () => {
 
   map.invalidateSize()
 
+  // Re-render tiles whenever the panel is resized
+  resizeObserver = new ResizeObserver(() => map?.invalidateSize())
+  resizeObserver.observe(mapContainer.value)
+
   map.on('moveend zoomend', () => {
     if (!map) return
     const c = map.getCenter()
@@ -82,6 +87,8 @@ onMounted(async () => {
 })
 
 onBeforeUnmount(() => {
+  resizeObserver?.disconnect()
+  resizeObserver = null
   map?.remove()
   map = null
 })
