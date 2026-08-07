@@ -71,8 +71,8 @@ risk.
 | `panel_opened` | panel name | `{}` |
 | `panel_closed` | panel name | `{ "duration_ms": number }` |
 | `map_view_changed` | `"map"` | `{ "zoom": number }` (no coordinates) |
-| `map_point_added` | `"map"` | `{}` |
-| `map_point_deleted` | `"map"` | `{}` |
+| `map_point_added` | `"map"` | `{ "total_points": number }` |
+| `map_point_deleted` | `"map"` | `{ "total_points": number }` |
 | `graph_rendered` | `"graph"` | `{ "chart_type": "line\|bar\|pie" }` |
 | `note_saved` | `"notes"` | `{}` |
 | `history_conversation_loaded` | `"history"` | `{}` |
@@ -205,8 +205,8 @@ handlers — no restructuring of component logic:
 - `onBeforeUnmount`: `track('panel_closed', 'map', { duration_ms })`
 - `moveend`/`zoomend` handler: `track('map_view_changed', 'map', { zoom })`
   — coordinates are NOT included.
-- (Phase 2, after map-points spec): `track('map_point_added', 'map')` /
-  `track('map_point_deleted', 'map')`.
+- After `mapStore.addPoint(...)` succeeds: `track('map_point_added', 'map', { total_points: mapStore.points.length })`
+- After `mapStore.removePoint(...)` succeeds: `track('map_point_deleted', 'map', { total_points: mapStore.points.length })`
 
 **NavBar.vue**
 - `selectModule` click: `track('panel_opened', module)` when opening;
@@ -276,7 +276,8 @@ New file `frontend/src/stores/telemetryStore.test.ts`:
 1. Every widget panel open/close emits `panel_opened` / `panel_closed` events
    visible in the telemetry SQLite DB.
 2. Map zoom-level changes emit `map_view_changed` with zoom but no coordinates.
-3. Note saves, history loads, and agent messages each emit their respective
+4. Map point additions and deletions emit `map_point_added` / `map_point_deleted` with the running `total_points` count but no coordinates or labels.
+5. Note saves, history loads, and agent messages each emit their respective
    events.
 4. Telemetry failures (backend unreachable) produce no visible error in the UI.
 5. Setting `TELEMETRY_ENABLED=False` (backend) or `VITE_TELEMETRY_ENABLED=false`
@@ -295,5 +296,6 @@ New file `frontend/src/stores/telemetryStore.test.ts`:
   points (e.g., users who open Graph but never interact with it).
 - **Error telemetry**: capture frontend JS errors (unhandled exceptions) as a
   separate event type to track regressions in production.
-- **Map-point events**: wire `map_point_added` / `map_point_deleted` once the
-  map-coordinate-points spec is implemented.
+- **Map-point events**: ~~wire `map_point_added` / `map_point_deleted` once the
+  map-coordinate-points spec is implemented~~ (now implemented — see
+  `specs/completed/map-coordinate-points.spec.md`).

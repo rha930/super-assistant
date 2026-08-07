@@ -61,4 +61,47 @@ describe('mapStore', () => {
       expect(store.lastZoom).toBe(2)
     })
   })
+
+  describe('coordinate points', () => {
+    it('starts with empty points and counter at 0', () => {
+      const store = useMapStore()
+      expect(store.points).toEqual([])
+      expect(store.pointCounter).toBe(0)
+    })
+
+    it('addPoint appends a point with correct lat/lng and auto-label', () => {
+      const store = useMapStore()
+      const p = store.addPoint(48.8, 2.3)
+      expect(store.points).toHaveLength(1)
+      expect(p.lat).toBe(48.8)
+      expect(p.lng).toBe(2.3)
+      expect(p.label).toBe('Point 1')
+    })
+
+    it('addPoint increments label counter across multiple calls', () => {
+      const store = useMapStore()
+      store.addPoint(0, 0)
+      const p = store.addPoint(1, 1)
+      expect(p.label).toBe('Point 2')
+      expect(store.points).toHaveLength(2)
+    })
+
+    it('removePoint removes the correct point and leaves others', () => {
+      const store = useMapStore()
+      const a = store.addPoint(10, 10)
+      const b = store.addPoint(20, 20)
+      store.removePoint(a.id)
+      expect(store.points).toHaveLength(1)
+      expect(store.points[0].id).toBe(b.id)
+    })
+
+    it('updatePointLabel updates only the named point label', () => {
+      const store = useMapStore()
+      const a = store.addPoint(10, 10)
+      const b = store.addPoint(20, 20)
+      store.updatePointLabel(a.id, 'My Place')
+      expect(store.points.find((p) => p.id === a.id)?.label).toBe('My Place')
+      expect(store.points.find((p) => p.id === b.id)?.label).toBe('Point 2')
+    })
+  })
 })
