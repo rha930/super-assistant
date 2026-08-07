@@ -32,8 +32,10 @@ latency and no round-trip to a telemetry store.
    today in `strands_agent.py` / `strands_provider.py`).
 4. The agent can reference the context naturally ("You're looking at zoom 8
    around Tokyo — here's what's interesting in that region…").
-5. No coordinates, note content, message content, or PII are included —
-   `widget_context` is strictly structural/positional metadata.
+5. `widget_context` is strictly structural/positional metadata; no note body,
+   graph data values, or message content are included. Map coordinates (center
+   lat/lng) are included as they are inherently non-personal and enable the
+   agent to give location-aware answers.
 6. `widget_context` is optional; if the frontend sends none or the field is
    absent, the backend behaves identically to today.
 
@@ -69,7 +71,8 @@ interface WidgetContext {
   active_panel: 'map' | 'graph' | 'notes' | 'history' | null
   map?: {
     zoom: number          // current zoom level (integer)
-    // No lat/lng — structural only
+    center_lat: number    // map center latitude, rounded to 4 decimal places
+    center_lng: number    // map center longitude, rounded to 4 decimal places
     point_count: number   // number of user-placed pins
   }
   graph?: {
@@ -86,7 +89,9 @@ interface WidgetContext {
 
 Constraints:
 - `map.zoom` is an integer rounded to the nearest whole number.
-- No map coordinates (center lat/lng) are sent.
+- `map.center_lat` and `map.center_lng` are rounded to 4 decimal places
+  (~11 m precision) — sufficient for region-level awareness without exposing
+  street-level precision.
 - `graph.active_chart_title` is the title string only — no data values or labels.
 - `notes.note_title` is the title only — no note body content.
 - The entire field is omitted if no widget is open (`active_panel: null` and all
@@ -129,6 +134,8 @@ export function useWidgetContext(): WidgetContext | null {
   if (panel === 'map') {
     ctx.map = {
       zoom: mapStore.lastZoom,
+      center_lat: Math.round(mapStore.lastCenter[0] * 10000) / 10000,
+      center_lng: Math.round(mapStore.lastCenter[1] * 10000) / 10000,
       point_count: mapStore.points.length,
     }
   }
@@ -256,6 +263,7 @@ def _build_widget_context_block(self, ctx: dict | None) -> str | None:
         zoom = int(m.get("zoom", 0))
         detail = _zoom_label(zoom)
         lines.append(f"- Map zoom level: {zoom} ({detail})")
+        lines.append(f"- Map center: approximately ({m.get('center_lat', 0):.4f}, {m.get('center_lng', 0):.4f})")
         lines.append(f"- User has placed {m.get('point_count', 0)} map pin(s)")
 
     elif panel == "graph" and "graph" in ctx:
@@ -338,13 +346,14 @@ Validation: if `widget_context` is present but not a dict, treat it as `None`
 - The backend never reflects `widget_context` back in any response — it is
   consumed into the system prompt only.
 - `_build_widget_context_block` sanitises by extracting only known typed fields
-  (`zoom`, `point_count`, `chart_count`, `active_chart_type`,
-  `active_chart_title`, `note_title`, `note_taking_mode`) and never writes
-  arbitrary string values from the context dict verbatim into the system prompt
-  except for `active_chart_title` and `note_title`, which are bounded by length
-  (`[:200]` slice) to prevent prompt-injection via a very long title.
-- No coordinates, note body, graph data values, or message content appear in the
-  context block.
+  (`zoom`, `center_lat`, `center_lng`, `point_count`, `chart_count`,
+  `active_chart_type`, `active_chart_title`, `note_title`, `note_taking_mode`)
+  and never writes arbitrary string values from the context dict verbatim into
+  the system prompt except for `active_chart_title` and `note_title`, which are
+  bounded by length (`[:200]` slice) to prevent prompt-injection via a very long
+  title.
+- `center_lat` and `center_lng` are numeric values validated as `float`; any
+  non-numeric value is silently replaced with `0.0` before use.
 
 ---
 
@@ -354,8 +363,7 @@ Validation: if `widget_context` is present but not a dict, treat it as `None`
 New file `backend/tests/test_widget_context.py`:
 1. `_build_widget_context_block(None)` returns `None`.
 2. `_build_widget_context_block({})` returns `None`.
-3. Map context block contains zoom label and point count; does not contain
-   coordinate strings.
+3. Map context block contains zoom label, coordinates, and point count.
 4. Graph context block contains chart count, type, and title.
 5. Notes context block contains note title; when `note_taking_mode=True`,
    includes the note-taking mode sentence.
@@ -371,8 +379,9 @@ New file `backend/tests/test_widget_context.py`:
 ### Frontend (`cd frontend && npm test`)
 New file `frontend/src/composables/useWidgetContext.test.ts`:
 1. Returns `null` when `activeModule` is `null`.
-2. Returns correct `active_panel: 'map'` and map sub-object when map panel is
-   active.
+2. Returns correct `active_panel: 'map'` and map sub-object including
+   `center_lat`, `center_lng` (rounded to 4 d.p.), `zoom`, and `point_count`
+   when map panel is active.
 3. Returns correct `active_panel: 'graph'` and graph sub-object with title and
    type of first graph.
 4. Returns correct `active_panel: 'notes'` and notes sub-object with title and
@@ -382,9 +391,10 @@ New file `frontend/src/composables/useWidgetContext.test.ts`:
 ---
 
 ## Acceptance Criteria
-1. When the Map panel is open at zoom 8 with 2 placed pins and the user sends
-   a message, the agent's system prompt contains a block mentioning "city-area
-   view", "zoom level: 8", and "2 map pin(s)".
+1. When the Map panel is open at zoom 8 centered near Tokyo (35.6762, 139.6503)
+   with 2 placed pins and the user sends a message, the agent's system prompt
+   contains a block mentioning "city-area view", "zoom level: 8",
+   "(35.6762, 139.6503)", and "2 map pin(s)".
 2. When the Graph panel is open with a bar chart titled "Revenue 2026" and the
    user sends a message, the system prompt contains "bar" and "Revenue 2026".
 3. When the Notes panel is open with note title "Ideas" in note-taking mode and
@@ -398,9 +408,8 @@ New file `frontend/src/composables/useWidgetContext.test.ts`:
 ---
 
 ## Phase 2 Considerations
-- **Map coordinates**: after getting explicit user consent or confirming
-  regulatory compliance, include the current map center lat/lng so the agent can
-  fetch location-specific data (weather, Wikipedia, etc.).
+- **Map coordinates**: ~~deferred pending consent review~~ Coordinates are now
+   included in the current-version schema (rounded to 4 d.p.).
 - **Active graph data**: pass a sampled subset of graph series data so the agent
   can describe trends quantitatively, not just structurally.
 - **Multi-panel context**: when multiple panels are open simultaneously (Phase 2
