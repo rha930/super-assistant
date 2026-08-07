@@ -33,16 +33,94 @@
 
 <script setup lang="ts">
 import { ref, onMounted, onBeforeUnmount, nextTick } from 'vue'
+import type { MapPoint } from '../stores/mapStore'
 import { useMapStore } from '../stores/mapStore'
 
 const mapStore = useMapStore()
 const mapContainer = ref<HTMLElement | null>(null)
 let map: any = null
 let resizeObserver: ResizeObserver | null = null
+// keyed by MapPoint.id for O(1) lookup on delete
+const markerLayer = new Map<string, any>()
 
 function resetView() {
   mapStore.resetView()
   map?.setView(mapStore.lastCenter, mapStore.lastZoom)
+}
+
+function escAttr(s: string): string {
+  return s.replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+}
+
+function placeMarker(L: any, point: MapPoint) {
+  const marker = L.marker([point.lat, point.lng])
+  marker.bindTooltip(point.label, { permanent: true, direction: 'top', offset: [0, -30] })
+
+  // Left-click: edit label
+  marker.on('click', () => {
+    const inputId = `edit-input-${point.id}`
+    const saveId = `edit-save-${point.id}`
+    const current = mapStore.points.find((p) => p.id === point.id)?.label ?? point.label
+    marker
+      .bindPopup(
+        `<div style="min-width:180px;padding:2px">
+          <input id="${inputId}" type="text" value="${escAttr(current)}"
+            style="width:100%;border:1px solid #ccc;border-radius:4px;padding:4px;box-sizing:border-box;margin-bottom:6px"/>
+          <button id="${saveId}"
+            style="width:100%;background:#3b82f6;color:#fff;border:none;border-radius:4px;padding:4px 8px;cursor:pointer">
+            Save
+          </button>
+        </div>`,
+      )
+      .openPopup()
+    setTimeout(() => {
+      const input = document.getElementById(inputId) as HTMLInputElement | null
+      const btn = document.getElementById(saveId)
+      input?.select()
+      if (input && btn) {
+        btn.onclick = () => {
+          const newLabel = input.value.trim() || current
+          mapStore.updatePointLabel(point.id, newLabel)
+          marker.setTooltipContent(newLabel)
+          marker.closePopup()
+        }
+        input.onkeydown = (e) => {
+          if (e.key === 'Enter') btn.click()
+        }
+      }
+    }, 50)
+  })
+
+  // Right-click on marker: delete (stop propagation so map contextmenu doesn't also fire)
+  marker.on('contextmenu', (ev: any) => {
+    L.DomEvent.stopPropagation(ev)
+    const deleteId = `del-${point.id}`
+    marker
+      .bindPopup(
+        `<button id="${deleteId}"
+          style="color:#ef4444;padding:4px 8px;border:1px solid #ef4444;border-radius:4px;cursor:pointer;background:transparent">
+          Delete point
+        </button>`,
+      )
+      .openPopup()
+    setTimeout(() => {
+      const btn = document.getElementById(deleteId)
+      if (btn) {
+        btn.onclick = () => {
+          mapStore.removePoint(point.id)
+          markerLayer.get(point.id)?.remove()
+          markerLayer.delete(point.id)
+        }
+      }
+    }, 50)
+  })
+
+  marker.addTo(map)
+  markerLayer.set(point.id, marker)
+}
+
+function restorePoints(L: any) {
+  mapStore.points.forEach((p) => placeMarker(L, p))
 }
 
 onMounted(async () => {
@@ -54,10 +132,16 @@ onMounted(async () => {
   if (!w.L) {
     await new Promise<void>((resolve) => {
       const interval = setInterval(() => {
-        if (w.L) { clearInterval(interval); resolve() }
+        if (w.L) {
+          clearInterval(interval)
+          resolve()
+        }
       }, 50)
       // Give up after 10 s to avoid hanging indefinitely
-      setTimeout(() => { clearInterval(interval); resolve() }, 10_000)
+      setTimeout(() => {
+        clearInterval(interval)
+        resolve()
+      }, 10_000)
     })
   }
   if (!w.L || !mapContainer.value) return
@@ -84,11 +168,39 @@ onMounted(async () => {
     const c = map.getCenter()
     mapStore.setView([c.lat, c.lng], map.getZoom())
   })
+
+  // Right-click on empty map canvas: add a point
+  map.on('contextmenu', (e: any) => {
+    const addId = `add-${Date.now()}`
+    L.popup()
+      .setLatLng(e.latlng)
+      .setContent(
+        `<button id="${addId}"
+          style="padding:4px 10px;border:1px solid #3b82f6;color:#3b82f6;border-radius:4px;cursor:pointer;background:transparent">
+          Add point here
+        </button>`,
+      )
+      .openOn(map)
+    setTimeout(() => {
+      const btn = document.getElementById(addId)
+      if (btn) {
+        btn.onclick = () => {
+          const point = mapStore.addPoint(e.latlng.lat, e.latlng.lng)
+          placeMarker(L, point)
+          map.closePopup()
+        }
+      }
+    }, 50)
+  })
+
+  // Restore any markers placed in a previous panel open this session
+  restorePoints(L)
 })
 
 onBeforeUnmount(() => {
   resizeObserver?.disconnect()
   resizeObserver = null
+  markerLayer.clear()
   map?.remove()
   map = null
 })

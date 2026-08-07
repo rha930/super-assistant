@@ -3,17 +3,35 @@ import { mount, flushPromises } from '@vue/test-utils'
 import { setActivePinia, createPinia } from 'pinia'
 
 // Provide window.L (CDN global) before the component is imported.
+const mockMarkerInstance = {
+  addTo: vi.fn().mockReturnThis(),
+  bindTooltip: vi.fn().mockReturnThis(),
+  bindPopup: vi.fn().mockReturnThis(),
+  openPopup: vi.fn().mockReturnThis(),
+  closePopup: vi.fn().mockReturnThis(),
+  on: vi.fn().mockReturnThis(),
+  remove: vi.fn(),
+  setTooltipContent: vi.fn(),
+}
 const mockMapInstance = {
   setView: vi.fn().mockReturnThis(),
   on: vi.fn().mockReturnThis(),
   remove: vi.fn(),
   invalidateSize: vi.fn(),
+  closePopup: vi.fn(),
   getCenter: vi.fn().mockReturnValue({ lat: 20, lng: 0 }),
   getZoom: vi.fn().mockReturnValue(2),
 }
 const mockL = {
   map: vi.fn().mockReturnValue(mockMapInstance),
   tileLayer: vi.fn().mockReturnValue({ addTo: vi.fn() }),
+  marker: vi.fn().mockReturnValue(mockMarkerInstance),
+  popup: vi.fn().mockReturnValue({
+    setLatLng: vi.fn().mockReturnThis(),
+    setContent: vi.fn().mockReturnThis(),
+    openOn: vi.fn().mockReturnThis(),
+  }),
+  DomEvent: { stopPropagation: vi.fn() },
 }
 ;(globalThis as any).L = mockL
 
@@ -24,6 +42,7 @@ const mockL = {
 }
 
 import MapPanel from '../components/MapPanel.vue'
+import { useMapStore } from '../stores/mapStore'
 
 describe('MapPanel.vue', () => {
   beforeEach(() => {
@@ -31,6 +50,7 @@ describe('MapPanel.vue', () => {
     vi.clearAllMocks()
     mockL.map.mockReturnValue(mockMapInstance)
     mockL.tileLayer.mockReturnValue({ addTo: vi.fn() })
+    mockL.marker.mockReturnValue(mockMarkerInstance)
   })
 
   it('renders the map container element', () => {
@@ -59,6 +79,20 @@ describe('MapPanel.vue', () => {
   it('shows the panel title', () => {
     const wrapper = mount(MapPanel, { global: { plugins: [createPinia()] } })
     expect(wrapper.text()).toContain('Map')
+  })
+
+  it('restores pre-existing store points on mount via L.marker', async () => {
+    const pinia = createPinia()
+    setActivePinia(pinia)
+    const store = useMapStore()
+    store.addPoint(48.8, 2.3)
+
+    mount(MapPanel, { global: { plugins: [pinia] } })
+    await flushPromises()
+
+    // L.marker should have been called once for the restored point
+    expect(mockL.marker).toHaveBeenCalledTimes(1)
+    expect(mockL.marker).toHaveBeenCalledWith([48.8, 2.3])
   })
 })
 
