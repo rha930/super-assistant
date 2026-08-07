@@ -1,9 +1,9 @@
 """Unit tests for strands_tools factory functions."""
 
 import json
-from unittest.mock import MagicMock
+from unittest.mock import MagicMock, patch
 
-from services.strands_tools import build_generate_graph_tool, build_news_search_tool
+from services.strands_tools import build_fly_to_location_tool, build_generate_graph_tool, build_news_search_tool
 
 # ---------------------------------------------------------------------------
 # news_search tool
@@ -181,3 +181,107 @@ class TestGenerateGraphTool:
             )
             assert len(store) == 1, f"Expected artifact for chart_type={chart_type}"
             assert "error" not in result.lower()
+
+
+# ---------------------------------------------------------------------------
+# fly_to_location tool
+# ---------------------------------------------------------------------------
+
+
+def _nominatim_hit(lat="51.5074", lon="-0.1278", display_name="London, UK", osm_type="city"):
+    return {"lat": lat, "lon": lon, "display_name": display_name, "type": osm_type}
+
+
+class TestFlyToLocationTool:
+    def _make_tool(self, store=None):
+        return build_fly_to_location_tool(store if store is not None else [])
+
+    def test_coordinate_string_bypasses_nominatim(self):
+        store: list = []
+        tool_fn = self._make_tool(store)
+        with patch("services.strands_tools.requests.get") as mock_get:
+            result = tool_fn(place="51.5, -0.1")
+        mock_get.assert_not_called()
+        assert len(store) == 1
+        assert store[0]["type"] == "map_action"
+        assert store[0]["lat"] == 51.5
+        assert store[0]["lng"] == -0.1
+        assert "flying" in result.lower()
+
+    def test_place_name_calls_nominatim_and_emits_artifact(self):
+        store: list = []
+        tool_fn = self._make_tool(store)
+        mock_resp = MagicMock()
+        mock_resp.json.return_value = [_nominatim_hit()]
+        mock_resp.raise_for_status.return_value = None
+        with patch("services.strands_tools.requests.get", return_value=mock_resp) as mock_get:
+            result = tool_fn(place="London")
+        mock_get.assert_called_once()
+        call_params = mock_get.call_args.kwargs.get("params") or mock_get.call_args[1].get("params") or {}
+        assert call_params.get("q") == "London"
+        assert len(store) == 1
+        assert store[0]["action"] == "fly_to"
+        assert store[0]["lat"] == 51.5074
+        assert "London" in result
+
+    def test_returns_error_string_when_no_results(self):
+        store: list = []
+        tool_fn = self._make_tool(store)
+        mock_resp = MagicMock()
+        mock_resp.json.return_value = []
+        mock_resp.raise_for_status.return_value = None
+        with patch("services.strands_tools.requests.get", return_value=mock_resp):
+            result = tool_fn(place="Xyz123Nonexistent")
+        assert "could not find" in result.lower()
+        assert len(store) == 0
+
+    def test_returns_error_string_on_network_exception(self):
+        store: list = []
+        tool_fn = self._make_tool(store)
+        with patch("services.strands_tools.requests.get", side_effect=Exception("timeout")):
+            result = tool_fn(place="London")
+        assert "unavailable" in result.lower() or "failed" in result.lower() or "geocod" in result.lower()
+        assert len(store) == 0
+
+    def test_caps_place_at_500_chars(self):
+        store: list = []
+        tool_fn = self._make_tool(store)
+        mock_resp = MagicMock()
+        mock_resp.json.return_value = [_nominatim_hit()]
+        mock_resp.raise_for_status.return_value = None
+        long_place = "a" * 600
+        with patch("services.strands_tools.requests.get", return_value=mock_resp) as mock_get:
+            tool_fn(place=long_place)
+        actual_q = (mock_get.call_args.kwargs.get("params") or {}).get("q", "")
+        assert len(actual_q) == 500
+
+    def test_uses_caller_zoom_when_valid(self):
+        store: list = []
+        tool_fn = self._make_tool(store)
+        mock_resp = MagicMock()
+        mock_resp.json.return_value = [_nominatim_hit()]
+        mock_resp.raise_for_status.return_value = None
+        with patch("services.strands_tools.requests.get", return_value=mock_resp):
+            tool_fn(place="London", zoom=15)
+        assert store[0]["zoom"] == 15
+
+    def test_auto_selects_zoom_from_osm_type(self):
+        store: list = []
+        tool_fn = self._make_tool(store)
+        mock_resp = MagicMock()
+        mock_resp.json.return_value = [_nominatim_hit(osm_type="country")]
+        mock_resp.raise_for_status.return_value = None
+        with patch("services.strands_tools.requests.get", return_value=mock_resp):
+            tool_fn(place="France", zoom=0)
+        assert store[0]["zoom"] == 5  # country → 5
+
+    def test_rejects_out_of_range_coordinates_from_nominatim(self):
+        store: list = []
+        tool_fn = self._make_tool(store)
+        mock_resp = MagicMock()
+        mock_resp.json.return_value = [_nominatim_hit(lat="999", lon="999")]
+        mock_resp.raise_for_status.return_value = None
+        with patch("services.strands_tools.requests.get", return_value=mock_resp):
+            result = tool_fn(place="Nowhere")
+        assert "out-of-range" in result.lower() or "coordinate" in result.lower()
+        assert len(store) == 0

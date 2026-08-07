@@ -13,7 +13,7 @@ from services.history_repository import ChatHistoryRepository
 from services.history_repository_local import LocalChatHistoryRepository
 from services.history_repository_redis import RedisChatHistoryRepository
 from services.strands_provider import build_agent
-from services.strands_tools import build_generate_graph_tool, build_news_search_tool
+from services.strands_tools import build_fly_to_location_tool, build_generate_graph_tool, build_news_search_tool
 
 logger = logging.getLogger(__name__)
 
@@ -49,6 +49,7 @@ class ChatService:
         tools = [
             build_news_search_tool(gnews),
             build_generate_graph_tool(artifact_store),
+            build_fly_to_location_tool(artifact_store),
         ]
         return build_agent(
             provider=provider,
