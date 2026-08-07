@@ -42,7 +42,7 @@ const mockL = {
   disconnect() {}
 }
 
-import MapPanel from '../components/MapPanel.vue'
+import MapPanel from './MapPanel.vue'
 import { useMapStore } from '../stores/mapStore'
 import { useChatStore } from '../stores/chatStore'
 
