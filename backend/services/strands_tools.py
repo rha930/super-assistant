@@ -10,6 +10,7 @@ import json
 import logging
 import os
 import re
+import time
 import uuid
 from typing import Any
 
@@ -19,6 +20,7 @@ from strands import tool as strands_tool
 logger = logging.getLogger(__name__)
 
 _MAX_QUERY_LENGTH = 500
+_MAX_SQL_LENGTH = 5_000
 _MAX_SERIES_JSON_BYTES = 8_192
 _ALLOWED_CHART_TYPES = frozenset({"line", "bar", "pie"})
 
@@ -361,3 +363,83 @@ def build_describe_pins_tool():
         return "\n".join(lines)
 
     return strands_tool(describe_pins)
+
+
+def _format_result_table(columns: list, rows: list) -> str:
+    """Render columns/rows as a compact text table for prompt injection."""
+    header = " | ".join(str(c) for c in columns) if columns else "(no columns)"
+    lines = [header, "-" * min(len(header), 120)]
+    for row in rows:
+        lines.append(" | ".join("" if v is None else str(v) for v in row))
+    return "\n".join(lines)
+
+
+def build_database_query_tool(db_service: Any, activity_sink: list | None = None):
+    """Return a @tool that runs a read-only SQL query via db_service.
+
+    activity_sink: optional list that receives a detailed tool-call record
+    ({name, status, duration, inputs, outputs}) for each invocation. Only counts
+    are recorded in outputs — never raw row data.
+    """
+
+    def database_query(connector_name: str, sql: str) -> str:
+        """Run a read-only SQL SELECT query against a configured database connector.
+
+        Use this when the user asks a question that requires looking up current
+        data from a connected database (e.g., "how many rows in the orders
+        table", "show me the latest 5 customers").
+
+        connector_name must be one of the configured connector names.
+        Only SELECT (or WITH ... SELECT) statements are permitted; write
+        operations are rejected. Results are capped to a configurable maximum
+        row count.
+
+        Returns a formatted table of results or an error description.
+        """
+        connector_name = (connector_name or "").strip()[:100]
+        sql = (sql or "").strip()[:_MAX_SQL_LENGTH]
+        started = time.perf_counter()
+
+        def _record(status: str, row_count: int = 0, truncated: bool = False) -> None:
+            if activity_sink is None:
+                return
+            activity_sink.append(
+                {
+                    "name": "database_query",
+                    "status": status,
+                    "duration": int((time.perf_counter() - started) * 1000),
+                    "inputs": {"connector_name": connector_name, "sql": sql},
+                    "outputs": {"row_count": row_count, "truncated": truncated},
+                }
+            )
+
+        if not connector_name:
+            _record("error")
+            return "No connector name specified."
+        if not sql:
+            _record("error")
+            return "No SQL query specified."
+
+        try:
+            result = db_service.execute_read_only_query(connector_name, sql)
+        except ValueError as exc:
+            _record("error")
+            return f"Query rejected: {exc}"
+        except Exception as exc:  # noqa: BLE001 - sanitized message only
+            logger.warning("database_query tool failed: %s", type(exc).__name__)
+            _record("error")
+            return f"Query failed: {exc}"
+
+        columns = result.get("columns", [])
+        rows = result.get("rows", [])
+        row_count = result.get("row_count", len(rows))
+        truncated = bool(result.get("truncated", False))
+        _record("success", row_count=row_count, truncated=truncated)
+
+        if not rows:
+            return f"Query on '{connector_name}' returned 0 rows."
+        table = _format_result_table(columns, rows)
+        note = f"\n\n(Showing first {row_count} rows; results truncated.)" if truncated else ""
+        return f"Query results from '{connector_name}' ({row_count} row(s)):\n{table}{note}"
+
+    return strands_tool(database_query)

@@ -44,6 +44,7 @@ def create_app():
     # Register blueprints
     from routes.chat import chat_bp
     from routes.config import config_bp
+    from routes.database import database_bp
     from routes.gemini import gemini_bp
     from routes.health import health_bp
     from routes.notes import notes_bp
@@ -51,6 +52,7 @@ def create_app():
     app.register_blueprint(auth_bp)
     app.register_blueprint(chat_bp)
     app.register_blueprint(config_bp)
+    app.register_blueprint(database_bp)
     app.register_blueprint(health_bp)
     app.register_blueprint(gemini_bp)
     app.register_blueprint(notes_bp)

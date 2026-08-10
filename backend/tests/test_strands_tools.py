@@ -4,6 +4,7 @@ import json
 from unittest.mock import MagicMock, patch
 
 from services.strands_tools import (
+    build_database_query_tool,
     build_describe_pins_tool,
     build_fly_to_location_tool,
     build_generate_graph_tool,
@@ -399,3 +400,82 @@ class TestDescribePinsTool:
         assert "Good" in result
         assert "Bad" in result
         assert "unknown" in result.lower()
+
+
+# ---------------------------------------------------------------------------
+# database_query tool
+# ---------------------------------------------------------------------------
+
+
+class TestDatabaseQueryTool:
+    def _make_service(self, *, result=None, raise_exc=None):
+        svc = MagicMock()
+        if raise_exc is not None:
+            svc.execute_read_only_query.side_effect = raise_exc
+        else:
+            svc.execute_read_only_query.return_value = result or {
+                "columns": ["id", "name"],
+                "rows": [[1, "Alice"], [2, "Bob"]],
+                "row_count": 2,
+                "truncated": False,
+            }
+        return svc
+
+    def test_returns_formatted_table_on_success(self):
+        tool_fn = build_database_query_tool(self._make_service())
+        result = tool_fn(connector_name="analytics", sql="SELECT id, name FROM users")
+        assert "id | name" in result
+        assert "Alice" in result
+        assert "Bob" in result
+        assert "2 row(s)" in result
+
+    def test_zero_rows_message(self):
+        svc = self._make_service(result={"columns": ["id"], "rows": [], "row_count": 0, "truncated": False})
+        tool_fn = build_database_query_tool(svc)
+        result = tool_fn(connector_name="analytics", sql="SELECT id FROM users WHERE 1=0")
+        assert "0 rows" in result
+
+    def test_truncation_note_included(self):
+        svc = self._make_service(result={"columns": ["id"], "rows": [[1]], "row_count": 1, "truncated": True})
+        tool_fn = build_database_query_tool(svc)
+        result = tool_fn(connector_name="analytics", sql="SELECT id FROM users")
+        assert "truncated" in result.lower()
+
+    def test_unknown_connector_returns_error_string_not_exception(self):
+        svc = self._make_service(raise_exc=ValueError("Unknown database connector 'nope'."))
+        tool_fn = build_database_query_tool(svc)
+        result = tool_fn(connector_name="nope", sql="SELECT 1")
+        assert isinstance(result, str)
+        assert "rejected" in result.lower()
+
+    def test_non_select_returns_error_string(self):
+        svc = self._make_service(raise_exc=ValueError("Only read-only SELECT queries are permitted."))
+        tool_fn = build_database_query_tool(svc)
+        result = tool_fn(connector_name="analytics", sql="DELETE FROM users")
+        assert isinstance(result, str)
+        assert "rejected" in result.lower()
+
+    def test_missing_inputs_return_error_strings(self):
+        tool_fn = build_database_query_tool(self._make_service())
+        assert "connector" in tool_fn(connector_name="", sql="SELECT 1").lower()
+        assert "sql" in tool_fn(connector_name="analytics", sql="").lower()
+
+    def test_activity_sink_records_success_details(self):
+        sink: list = []
+        tool_fn = build_database_query_tool(self._make_service(), activity_sink=sink)
+        tool_fn(connector_name="analytics", sql="SELECT id FROM users")
+        assert len(sink) == 1
+        record = sink[0]
+        assert record["name"] == "database_query"
+        assert record["status"] == "success"
+        assert record["inputs"] == {"connector_name": "analytics", "sql": "SELECT id FROM users"}
+        assert record["outputs"] == {"row_count": 2, "truncated": False}
+        assert isinstance(record["duration"], int)
+
+    def test_activity_sink_records_error_without_rows(self):
+        sink: list = []
+        svc = self._make_service(raise_exc=ValueError("bad"))
+        tool_fn = build_database_query_tool(svc, activity_sink=sink)
+        tool_fn(connector_name="analytics", sql="DELETE FROM users")
+        assert sink[0]["status"] == "error"
+        assert sink[0]["outputs"] == {"row_count": 0, "truncated": False}

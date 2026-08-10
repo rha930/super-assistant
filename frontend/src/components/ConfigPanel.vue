@@ -45,6 +45,58 @@
         </p>
       </div>
 
+      <!-- Database Connectors (read-only) -->
+      <div>
+        <div class="flex items-center justify-between mb-2">
+          <h3 class="text-sm font-semibold app-text">Database Connectors</h3>
+          <button
+            @click="refreshConnectors"
+            :disabled="connectorsLoading"
+            class="p-1 app-text-muted rounded hover:opacity-80 transition-opacity disabled:opacity-40"
+            aria-label="Refresh database connectors"
+            title="Refresh database connectors"
+          >
+            <svg
+              xmlns="http://www.w3.org/2000/svg"
+              viewBox="0 0 24 24"
+              fill="currentColor"
+              class="w-4 h-4"
+              :class="{ 'animate-spin': connectorsLoading }"
+            >
+              <path d="M17.65 6.35A7.96 7.96 0 0 0 12 4c-4.42 0-7.99 3.58-7.99 8s3.57 8 7.99 8c3.73 0 6.84-2.55 7.73-6h-2.08A5.99 5.99 0 0 1 12 18c-3.31 0-6-2.69-6-6s2.69-6 6-6c1.66 0 3.14.69 4.22 1.78L13 11h7V4l-2.35 2.35z" />
+            </svg>
+          </button>
+        </div>
+
+        <p
+          v-if="databaseConnectors.length === 0"
+          class="text-xs app-text-muted"
+        >
+          No database connectors configured.
+        </p>
+
+        <ul v-else class="space-y-2">
+          <li
+            v-for="connector in databaseConnectors"
+            :key="connector.name"
+            class="flex items-center justify-between px-3 py-2 rounded-lg border app-border app-surface-muted"
+          >
+            <div class="flex items-center gap-2 min-w-0">
+              <span class="text-sm app-text font-medium truncate">{{ connector.name }}</span>
+              <span class="text-xs px-2 py-0.5 rounded-full border app-border app-text-muted font-mono">
+                {{ connector.type }}
+              </span>
+            </div>
+            <span
+              class="text-xs px-2 py-0.5 rounded-full font-medium"
+              :class="connectorStatusClass(connector.status)"
+            >
+              {{ connectorStatusLabel(connector.status) }}
+            </span>
+          </li>
+        </ul>
+      </div>
+
       <!-- Model Selection -->
       <div>
         <div class="flex items-center justify-between mb-2">
@@ -289,6 +341,26 @@ const activeModels = computed(() =>
 
 const geminiAvailable = computed(() => configStore.geminiAvailable)
 
+const databaseConnectors = computed(() => configStore.databaseConnectors)
+const connectorsLoading = computed(() => configStore.databaseConnectorsLoading)
+
+const connectorStatusLabel = (status: string): string => {
+  if (status === 'connected') return 'Connected'
+  if (status === 'not_configured') return 'Not configured'
+  return 'Unavailable'
+}
+
+const connectorStatusClass = (status: string): string => {
+  if (status === 'connected') {
+    return 'bg-green-100 text-green-700 dark:bg-green-900/40 dark:text-green-300'
+  }
+  return 'app-surface-muted app-text-muted border app-border'
+}
+
+const refreshConnectors = async () => {
+  await configStore.loadDatabaseConnectors()
+}
+
 const noModelsAvailable = computed(() =>
   !configStore.modelsLoading && activeModels.value.length === 0
 )
@@ -343,6 +415,7 @@ onMounted(async () => {
     configStore.loadAvailableModels(),
     configStore.loadGeminiModels()
   ])
+  await configStore.loadDatabaseConnectors()
 })
 
 const saveConfig = async () => {
