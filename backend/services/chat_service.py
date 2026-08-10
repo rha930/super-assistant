@@ -199,7 +199,10 @@ class ChatService:
                         tool_calls_collected.append({"name": name, "status": "success"})
 
             agent = self._build_strands_agent(
-                provider, history, artifact_store, _cb,
+                provider,
+                history,
+                artifact_store,
+                _cb,
                 widget_context_block=self._build_widget_context_block(widget_context),
             )
             sdk_result = agent(message)
@@ -327,7 +330,10 @@ class ChatService:
                     )
 
             agent = self._build_strands_agent(
-                provider, history, artifact_store, _cb,
+                provider,
+                history,
+                artifact_store,
+                _cb,
                 widget_context_block=self._build_widget_context_block(widget_context),
             )
 
