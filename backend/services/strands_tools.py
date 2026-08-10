@@ -219,3 +219,145 @@ def build_fly_to_location_tool(artifact_store: list):
         return f"Flying to {short} (lat={lat}, lng={lng}) at zoom {effective_zoom}."
 
     return strands_tool(fly_to_location)
+
+
+_NOMINATIM_REVERSE_URL = "https://nominatim.openstreetmap.org/reverse"
+_MAX_PINS_DESCRIBE = 20
+_MAX_PINS_JSON_BYTES = 8_192
+
+
+def _geocode_forward(place: str) -> tuple[float, float, str, str | None]:
+    """Resolve place name or coordinate string to (lat, lng, display_name, osm_type).
+
+    Raises ValueError on failure.
+    """
+    coord_match = _COORD_RE.match(place)
+    if coord_match:
+        lat = round(float(coord_match.group(1)), 6)
+        lng = round(float(coord_match.group(2)), 6)
+        if not (-90 <= lat <= 90) or not (-180 <= lng <= 180):
+            raise ValueError(f"Coordinates out of range: {place}")
+        return lat, lng, place, None
+    resp = requests.get(
+        _NOMINATIM_URL,
+        params={"q": place, "format": "json", "limit": 1},
+        headers=_NOMINATIM_HEADERS,
+        timeout=_NOMINATIM_TIMEOUT,
+        verify=_NOMINATIM_VERIFY_SSL,
+    )
+    resp.raise_for_status()
+    results = resp.json()
+    if not results:
+        raise ValueError(f"No results for '{place}'")
+    hit = results[0]
+    lat = round(float(hit["lat"]), 6)
+    lng = round(float(hit["lon"]), 6)
+    if not (-90 <= lat <= 90) or not (-180 <= lng <= 180):
+        raise ValueError("Out-of-range coordinate from Nominatim")
+    return lat, lng, str(hit.get("display_name", place)), hit.get("type") or hit.get("addresstype")
+
+
+def _reverse_geocode(lat: float, lng: float) -> str:
+    """Return a human-readable location description for a coordinate."""
+    try:
+        resp = requests.get(
+            _NOMINATIM_REVERSE_URL,
+            params={"lat": lat, "lon": lng, "format": "json"},
+            headers=_NOMINATIM_HEADERS,
+            timeout=_NOMINATIM_TIMEOUT,
+            verify=_NOMINATIM_VERIFY_SSL,
+        )
+        resp.raise_for_status()
+        data = resp.json()
+    except Exception:
+        return "location unknown"
+    addr = data.get("address") or {}
+    parts = [
+        addr.get("road") or addr.get("suburb"),
+        addr.get("city") or addr.get("town") or addr.get("village"),
+        addr.get("state"),
+        addr.get("country"),
+    ]
+    description = ", ".join(p for p in parts if p)
+    return description or data.get("display_name", "location unknown")[:120]
+
+
+def build_place_pin_tool(artifact_store: list):
+    """Return a @tool that places a named pin on the map at a location."""
+
+    def place_pin(place: str, label: str = "") -> str:
+        """Place a named pin on the map at a specific location.
+
+        Use this when the user asks to mark, pin, save, or annotate a
+        location on the map. The pin will appear in the Map panel immediately.
+
+        place: place name ("Eiffel Tower") or "lat, lng" coordinate string.
+        label: optional pin label. Defaults to the resolved place name.
+
+        After calling this tool respond with a confirmation such as
+        "I've placed a pin at [label]. Would you like more information about
+        this location?"
+        """
+        place = place.strip()[:500]
+        label = label.strip()[:100]
+        if not place:
+            return "No place specified."
+        try:
+            lat, lng, resolved, osm_type = _geocode_forward(place)
+        except Exception as exc:
+            logger.warning("place_pin geocoding failed for %r: %s", place, exc)
+            return f"Could not locate '{place}': {exc}"
+        effective_label = label or resolved[:100]
+        artifact_store.append(
+            {
+                "type": "map_action",
+                "action": "add_pin",
+                "lat": lat,
+                "lng": lng,
+                "zoom": _zoom_for_type(osm_type),
+                "label": effective_label,
+            }
+        )
+        return f"Pin '{effective_label}' placed at ({lat}, {lng})."
+
+    return strands_tool(place_pin)
+
+
+def build_describe_pins_tool():
+    """Return a @tool that reverse-geocodes a list of map pins."""
+
+    def describe_pins(pins_json: str) -> str:
+        """Describe the geographic context of the user's map pins.
+
+        Use this when the user asks what country or region their pins are in,
+        wants information about a coordinate they placed on the map, or asks
+        "what are my pins?" / "tell me about Pin N".
+
+        pins_json: JSON array of pin objects, e.g.:
+          [{"label": "Point 1", "lat": 51.5, "lng": -0.1}]
+        Pass the pins_json value from the user's widget_context.map field.
+        Each pin is reverse-geocoded and described with city/country context.
+        """
+        if len(pins_json.encode()) > _MAX_PINS_JSON_BYTES:
+            return "pins_json exceeds maximum allowed size."
+        try:
+            pins = json.loads(pins_json)
+        except (json.JSONDecodeError, ValueError) as exc:
+            return f"pins_json is not valid JSON: {exc}"
+        if not isinstance(pins, list) or not pins:
+            return "No pins to describe."
+        pins = pins[:_MAX_PINS_DESCRIBE]
+        lines = []
+        for pin in pins:
+            lbl = str(pin.get("label", "?"))
+            try:
+                lat = float(pin["lat"])
+                lng = float(pin["lng"])
+            except (KeyError, TypeError, ValueError):
+                lines.append(f"{lbl}: invalid coordinates")
+                continue
+            description = _reverse_geocode(lat, lng)
+            lines.append(f"{lbl} ({lat:.4f}, {lng:.4f}): {description}")
+        return "\n".join(lines)
+
+    return strands_tool(describe_pins)

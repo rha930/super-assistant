@@ -92,9 +92,9 @@ describe('MapPanel.vue', () => {
     mount(MapPanel, { global: { plugins: [pinia] } })
     await flushPromises()
 
-    // L.marker should have been called once for the restored point
+    // L.marker should have been called once for the restored point (with draggable option)
     expect(mockL.marker).toHaveBeenCalledTimes(1)
-    expect(mockL.marker).toHaveBeenCalledWith([48.8, 2.3])
+    expect(mockL.marker).toHaveBeenCalledWith([48.8, 2.3], { draggable: true })
   })
 
   it('calls map.flyTo when pendingMapAction is set after mount', async () => {
@@ -109,6 +109,24 @@ describe('MapPanel.vue', () => {
     await flushPromises()
 
     expect(mockMapInstance.flyTo).toHaveBeenCalledWith([51.5, -0.1], 10)
+    expect(chatStore.pendingMapAction).toBeNull()
+  })
+
+  it('places a marker and calls map.flyTo for add_pin action', async () => {
+    const pinia = createPinia()
+    setActivePinia(pinia)
+    const chatStore = useChatStore()
+    const mapStore = useMapStore()
+
+    mount(MapPanel, { global: { plugins: [pinia] } })
+    await flushPromises()
+
+    chatStore.setPendingMapAction({ action: 'add_pin', lat: 48.86, lng: 2.35, label: 'Eiffel Tower' })
+    await flushPromises()
+
+    expect(mockL.marker).toHaveBeenCalledWith([48.86, 2.35], { draggable: true })
+    expect(mockMapInstance.flyTo).toHaveBeenCalledWith([48.86, 2.35], 12)
+    expect(mapStore.points[0]?.label).toBe('Eiffel Tower')
     expect(chatStore.pendingMapAction).toBeNull()
   })
 })

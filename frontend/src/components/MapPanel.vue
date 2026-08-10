@@ -57,19 +57,38 @@ function escAttr(s: string): string {
 }
 
 function placeMarker(L: any, point: MapPoint) {
-  const marker = L.marker([point.lat, point.lng])
+  const marker = L.marker([point.lat, point.lng], { draggable: true })
   marker.bindTooltip(point.label, { permanent: true, direction: 'top', offset: [0, -30] })
 
-  // Left-click: edit label
+  // Drag-end: update store coordinates
+  marker.on('dragend', () => {
+    const pos = marker.getLatLng()
+    mapStore.updatePointCoords(point.id, pos.lat, pos.lng)
+  })
+
+  // Left-click: edit label + coordinates
   marker.on('click', () => {
     const inputId = `edit-input-${point.id}`
+    const latId = `edit-lat-${point.id}`
+    const lngId = `edit-lng-${point.id}`
     const saveId = `edit-save-${point.id}`
-    const current = mapStore.points.find((p) => p.id === point.id)?.label ?? point.label
+    const errId = `edit-err-${point.id}`
+    const current = mapStore.points.find((p) => p.id === point.id) ?? point
     marker
       .bindPopup(
-        `<div style="min-width:180px;padding:2px">
-          <input id="${inputId}" type="text" value="${escAttr(current)}"
-            style="width:100%;border:1px solid #ccc;border-radius:4px;padding:4px;box-sizing:border-box;margin-bottom:6px"/>
+        `<div style="min-width:200px;padding:2px">
+          <input id="${inputId}" type="text" value="${escAttr(current.label)}"
+            placeholder="Label"
+            style="width:100%;border:1px solid #ccc;border-radius:4px;padding:4px;box-sizing:border-box;margin-bottom:4px"/>
+          <div style="display:flex;gap:4px;margin-bottom:4px">
+            <input id="${latId}" type="number" step="any" value="${current.lat}"
+              placeholder="Lat"
+              style="width:50%;border:1px solid #ccc;border-radius:4px;padding:4px;box-sizing:border-box"/>
+            <input id="${lngId}" type="number" step="any" value="${current.lng}"
+              placeholder="Lng"
+              style="width:50%;border:1px solid #ccc;border-radius:4px;padding:4px;box-sizing:border-box"/>
+          </div>
+          <div id="${errId}" style="color:#ef4444;font-size:12px;margin-bottom:4px"></div>
           <button id="${saveId}"
             style="width:100%;background:#3b82f6;color:#fff;border:none;border-radius:4px;padding:4px 8px;cursor:pointer">
             Save
@@ -78,19 +97,28 @@ function placeMarker(L: any, point: MapPoint) {
       )
       .openPopup()
     setTimeout(() => {
-      const input = document.getElementById(inputId) as HTMLInputElement | null
+      const labelInput = document.getElementById(inputId) as HTMLInputElement | null
+      const latInput = document.getElementById(latId) as HTMLInputElement | null
+      const lngInput = document.getElementById(lngId) as HTMLInputElement | null
+      const errDiv = document.getElementById(errId)
       const btn = document.getElementById(saveId)
-      input?.select()
-      if (input && btn) {
+      labelInput?.select()
+      if (labelInput && latInput && lngInput && btn) {
         btn.onclick = () => {
-          const newLabel = input.value.trim() || current
+          const newLat = parseFloat(latInput.value)
+          const newLng = parseFloat(lngInput.value)
+          if (isNaN(newLat) || newLat < -90 || newLat > 90 || isNaN(newLng) || newLng < -180 || newLng > 180) {
+            if (errDiv) errDiv.textContent = 'Lat must be −90..90, Lng −180..180'
+            return
+          }
+          const newLabel = labelInput.value.trim() || current.label
           mapStore.updatePointLabel(point.id, newLabel)
+          mapStore.updatePointCoords(point.id, newLat, newLng)
+          marker.setLatLng([newLat, newLng])
           marker.setTooltipContent(newLabel)
           marker.closePopup()
         }
-        input.onkeydown = (e) => {
-          if (e.key === 'Enter') btn.click()
-        }
+        labelInput.onkeydown = (e) => { if (e.key === 'Enter') btn.click() }
       }
     }, 50)
   })
@@ -173,27 +201,36 @@ onMounted(async () => {
     mapStore.setView([c.lat, c.lng], map.getZoom())
   })
 
-  // Right-click on empty map canvas: add a point
+  // Right-click on empty map canvas: add a point with optional name
   map.on('contextmenu', (e: any) => {
-    const addId = `add-${Date.now()}`
+    const nameId = `pin-name-${Date.now()}`
+    const addId = `pin-add-${Date.now()}`
     L.popup()
       .setLatLng(e.latlng)
       .setContent(
-        `<button id="${addId}"
-          style="padding:4px 10px;border:1px solid #3b82f6;color:#3b82f6;border-radius:4px;cursor:pointer;background:transparent">
-          Add point here
-        </button>`,
+        `<div style="min-width:200px;padding:4px">
+          <input id="${nameId}" type="text" placeholder="Pin name (optional)"
+            style="width:100%;border:1px solid #ccc;border-radius:4px;padding:4px;
+                   box-sizing:border-box;margin-bottom:6px"/>
+          <button id="${addId}"
+            style="width:100%;background:#3b82f6;color:#fff;border:none;
+                   border-radius:4px;padding:4px 8px;cursor:pointer">Add pin</button>
+        </div>`,
       )
       .openOn(map)
     setTimeout(() => {
+      const nameInput = document.getElementById(nameId) as HTMLInputElement | null
       const btn = document.getElementById(addId)
-      if (btn) {
-        btn.onclick = () => {
-          const point = mapStore.addPoint(e.latlng.lat, e.latlng.lng)
-          placeMarker(L, point)
-          map.closePopup()
-        }
+      nameInput?.focus()
+      const doAdd = () => {
+        const typedName = nameInput?.value.trim() ?? ''
+        const point = mapStore.addPoint(e.latlng.lat, e.latlng.lng)
+        if (typedName) mapStore.updatePointLabel(point.id, typedName)
+        placeMarker(L, { ...point, label: typedName || point.label })
+        map.closePopup()
       }
+      if (btn) btn.onclick = doAdd
+      if (nameInput) nameInput.onkeydown = (ev) => { if (ev.key === 'Enter') doAdd() }
     }, 50)
   })
 
@@ -209,17 +246,24 @@ onBeforeUnmount(() => {
   map = null
 })
 
-// Fly to location when the agent emits a map_action artifact
+// Fly to location or add pin when the agent emits a map_action artifact
 watch(
   () => chatStore.pendingMapAction,
   (action) => {
-    if (!action || action.action !== 'fly_to') return
-    if (navStore.activeModule !== 'map') {
-      navStore.selectModule('map')
-    }
+    if (!action) return
+    if (navStore.activeModule !== 'map') navStore.selectModule('map')
     nextTick(() => {
-      map?.flyTo([action.lat, action.lng], action.zoom)
-      mapStore.setView([action.lat, action.lng], action.zoom)
+      if (action.action === 'add_pin') {
+        const point = mapStore.addPoint(action.lat, action.lng)
+        const label = action.label || point.label
+        mapStore.updatePointLabel(point.id, label)
+        placeMarker((window as any).L, { ...point, label })
+        map?.flyTo([action.lat, action.lng], action.zoom ?? 12)
+        mapStore.setView([action.lat, action.lng], action.zoom ?? 12)
+      } else if (action.action === 'fly_to') {
+        map?.flyTo([action.lat, action.lng], action.zoom ?? 10)
+        mapStore.setView([action.lat, action.lng], action.zoom ?? 10)
+      }
       chatStore.clearPendingMapAction()
     })
   },

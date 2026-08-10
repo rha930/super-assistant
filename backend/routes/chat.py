@@ -38,9 +38,10 @@ def send_message():
         message = data["message"]
         conversation_id = data.get("conversation_id")
         user_id = _get_user_id()
+        widget_context = data.get("widget_context") if isinstance(data.get("widget_context"), dict) else None
 
         try:
-            response = chat_service.process_message(message, conversation_id, user_id=user_id)
+            response = chat_service.process_message(message, conversation_id, user_id=user_id, widget_context=widget_context)
             return SuccessResponse(data=response).to_dict(), 200
         except RuntimeError as e:
             # Connection errors from Ollama
@@ -68,6 +69,7 @@ def stream_message():
         message = data["message"]
         conversation_id = data.get("conversation_id")
         user_id = _get_user_id()
+        widget_context = data.get("widget_context") if isinstance(data.get("widget_context"), dict) else None
 
         @stream_with_context
         def event_stream():
@@ -81,7 +83,7 @@ def stream_message():
             yield f"data: {json.dumps(init_payload)}\n\n"
 
             try:
-                for event in chat_service.stream_message(message, conversation_id, user_id=user_id):
+                for event in chat_service.stream_message(message, conversation_id, user_id=user_id, widget_context=widget_context):
                     cid = event.get("conversation_id", cid)
                     chunk = event.get("chunk", "")
                     done = event.get("done", False)
