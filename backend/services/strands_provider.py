@@ -38,6 +38,7 @@ def build_agent(
     callback_handler: Callable | None,
     *,
     gemini_api_key: str = "",
+    widget_context_block: str | None = None,
 ):
     """Build a strands.Agent for the given provider.
 
@@ -49,12 +50,16 @@ def build_agent(
         callback_handler: Event callback (None → no output; pass a callable
             to receive streaming events).
         gemini_api_key: Gemini API key — only used when provider=="gemini".
+        widget_context_block: Natural-language description of the user's active
+            widget state, appended to the system prompt when present.
     """
     from strands import Agent
     from strands.agent.conversation_manager import SlidingWindowConversationManager
 
     model = _build_model(provider, config, gemini_api_key)
     system_prompt = config.get("system_prompt") or "You are a helpful AI assistant."
+    if widget_context_block:
+        system_prompt = f"{system_prompt}\n\n{widget_context_block}"
     messages = _history_to_strands_messages(history)
 
     return Agent(

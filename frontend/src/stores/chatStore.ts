@@ -5,6 +5,9 @@ import type { GraphPayload } from '../types/graph'
 import { api } from '../services/api'
 import { extractGraphArtifacts } from '../services/graphValidator'
 import { useUIStore } from './uiStore'
+import { useMapStore } from './mapStore'
+import { useNavStore } from './navStore'
+import { useNotesStore } from './notesStore'
 
 interface ConversationSummary {
   conversation_id: string
@@ -15,11 +18,12 @@ interface ConversationSummary {
 }
 
 export interface MapAction {
-  action: 'fly_to'
+  action: 'fly_to' | 'add_pin'
   lat: number
   lng: number
-  zoom: number
-  place_name: string
+  zoom?: number
+  place_name?: string
+  label?: string
 }
 
 export const useChatStore = defineStore('chat', () => {
@@ -92,7 +96,42 @@ export const useChatStore = defineStore('chat', () => {
     pendingMapAction.value = null
   }
 
+  function _buildWidgetContext() {
+    const navStore = useNavStore()
+    const mapStore = useMapStore()
+    const notesStore = useNotesStore()
+    const panel = navStore.activeModule
+    if (!panel) return null
+    const ctx: Record<string, unknown> = { active_panel: panel }
+    if (panel === 'map') {
+      ctx.map = {
+        zoom: mapStore.lastZoom,
+        center_lat: Math.round(mapStore.lastCenter[0] * 10000) / 10000,
+        center_lng: Math.round(mapStore.lastCenter[1] * 10000) / 10000,
+        point_count: mapStore.points.length,
+        pins_json: JSON.stringify(
+          mapStore.points.map((p) => ({ label: p.label, lat: p.lat, lng: p.lng })),
+        ),
+      }
+    } else if (panel === 'graph') {
+      const graphs = graphsByConversationId.value.get(currentConversationId.value) || []
+      ctx.graph = {
+        chart_count: graphs.length,
+        active_chart_type: graphs[0]?.chartType ?? null,
+        active_chart_title: (graphs[0]?.title ?? '').slice(0, 200) || null,
+      }
+    } else if (panel === 'notes') {
+      ctx.notes = {
+        note_title: (notesStore.activeNote?.title ?? '').slice(0, 200) || null,
+        note_taking_mode: notesStore.noteTakingMode,
+      }
+    }
+    return ctx
+  }
+
   const sendMessage = async (content: string) => {
+    // Snapshot active widget state to send as agent context
+    const widgetContext = _buildWidgetContext()
     // Add user message
     const userMessage: Message = {
       id: `msg_${Date.now()}`,
@@ -132,7 +171,8 @@ export const useChatStore = defineStore('chat', () => {
         headers,
         body: JSON.stringify({
           message: content,
-          conversation_id: currentConversationId.value
+          conversation_id: currentConversationId.value,
+          widget_context: widgetContext,
         })
       })
 
@@ -198,7 +238,7 @@ export const useChatStore = defineStore('chat', () => {
               }
               // Route map_action artifacts
               for (const artifact of artifactSource) {
-                if (artifact?.type === 'map_action' && artifact.action === 'fly_to') {
+                if (artifact?.type === 'map_action') {
                   setPendingMapAction(artifact as MapAction)
                 }
               }

@@ -3,7 +3,13 @@
 import json
 from unittest.mock import MagicMock, patch
 
-from services.strands_tools import build_fly_to_location_tool, build_generate_graph_tool, build_news_search_tool
+from services.strands_tools import (
+    build_describe_pins_tool,
+    build_fly_to_location_tool,
+    build_generate_graph_tool,
+    build_news_search_tool,
+    build_place_pin_tool,
+)
 
 # ---------------------------------------------------------------------------
 # news_search tool
@@ -285,3 +291,111 @@ class TestFlyToLocationTool:
             result = tool_fn(place="Nowhere")
         assert "out-of-range" in result.lower() or "coordinate" in result.lower()
         assert len(store) == 0
+
+
+# ---------------------------------------------------------------------------
+# place_pin tool
+# ---------------------------------------------------------------------------
+
+
+class TestPlacePinTool:
+    def _hit(self, lat="48.8584", lon="2.2945", name="Eiffel Tower, Paris", osm_type="tourism"):
+        return {"lat": lat, "lon": lon, "display_name": name, "type": osm_type}
+
+    def test_place_name_calls_nominatim_and_emits_add_pin_artifact(self):
+        store: list = []
+        tool_fn = build_place_pin_tool(store)
+        mock_resp = MagicMock()
+        mock_resp.json.return_value = [self._hit()]
+        mock_resp.raise_for_status.return_value = None
+        with patch("services.strands_tools.requests.get", return_value=mock_resp):
+            result = tool_fn(place="Eiffel Tower")
+        assert len(store) == 1
+        assert store[0]["action"] == "add_pin"
+        assert store[0]["lat"] == 48.8584
+        assert "Eiffel Tower" in result
+
+    def test_coordinate_string_bypasses_nominatim(self):
+        store: list = []
+        tool_fn = build_place_pin_tool(store)
+        with patch("services.strands_tools.requests.get") as mock_get:
+            tool_fn(place="51.5, -0.1")
+        mock_get.assert_not_called()
+        assert store[0]["lat"] == 51.5
+
+    def test_uses_caller_label_when_non_empty(self):
+        store: list = []
+        tool_fn = build_place_pin_tool(store)
+        mock_resp = MagicMock()
+        mock_resp.json.return_value = [self._hit()]
+        mock_resp.raise_for_status.return_value = None
+        with patch("services.strands_tools.requests.get", return_value=mock_resp):
+            tool_fn(place="Eiffel Tower", label="My pin")
+        assert store[0]["label"] == "My pin"
+
+    def test_falls_back_to_resolved_name_when_label_empty(self):
+        store: list = []
+        tool_fn = build_place_pin_tool(store)
+        mock_resp = MagicMock()
+        mock_resp.json.return_value = [self._hit(name="Eiffel Tower, Paris, France")]
+        mock_resp.raise_for_status.return_value = None
+        with patch("services.strands_tools.requests.get", return_value=mock_resp):
+            tool_fn(place="Eiffel Tower", label="")
+        assert "Eiffel" in store[0]["label"]
+
+
+# ---------------------------------------------------------------------------
+# describe_pins tool
+# ---------------------------------------------------------------------------
+
+
+class TestDescribePinsTool:
+    def _make_reverse_resp(self, country="France", city="Paris", state="Île-de-France"):
+        resp = MagicMock()
+        resp.raise_for_status.return_value = None
+        resp.json.return_value = {
+            "address": {"city": city, "state": state, "country": country},
+            "display_name": f"{city}, {state}, {country}",
+        }
+        return resp
+
+    def test_reverse_geocodes_each_pin_and_returns_descriptions(self):
+        tool_fn = build_describe_pins_tool()
+        pins = [{"label": "Pin A", "lat": 48.86, "lng": 2.35}]
+        with patch("services.strands_tools.requests.get", return_value=self._make_reverse_resp()):
+            result = tool_fn(pins_json=json.dumps(pins))
+        assert "Pin A" in result
+        assert "France" in result
+
+    def test_returns_error_string_for_invalid_json(self):
+        tool_fn = build_describe_pins_tool()
+        result = tool_fn(pins_json="not json [[[")
+        assert "not valid json" in result.lower()
+
+    def test_caps_at_20_pins(self):
+        tool_fn = build_describe_pins_tool()
+        many = [{"label": f"P{i}", "lat": float(i), "lng": 0.0} for i in range(30)]
+        calls = []
+
+        def fake_get(*args, **kwargs):
+            calls.append(1)
+            return self._make_reverse_resp()
+
+        with patch("services.strands_tools.requests.get", side_effect=fake_get):
+            tool_fn(pins_json=json.dumps(many))
+        assert len(calls) == 20
+
+    def test_individual_failure_returns_location_unknown_for_that_pin(self):
+        tool_fn = build_describe_pins_tool()
+        pins = [
+            {"label": "Good", "lat": 48.86, "lng": 2.35},
+            {"label": "Bad", "lat": 0.0, "lng": 0.0},
+        ]
+        good_resp = self._make_reverse_resp()
+        bad_resp = MagicMock()
+        bad_resp.raise_for_status.side_effect = Exception("network error")
+        with patch("services.strands_tools.requests.get", side_effect=[good_resp, bad_resp]):
+            result = tool_fn(pins_json=json.dumps(pins))
+        assert "Good" in result
+        assert "Bad" in result
+        assert "unknown" in result.lower()

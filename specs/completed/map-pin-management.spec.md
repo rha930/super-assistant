@@ -4,7 +4,11 @@
 Extend the map pin system in three directions:
 1. **User drag-to-reposition / coordinate edit** — let the user drag an existing
    pin to a new location or type exact coordinates in the edit popup.
-2. **Agent `place_pin` tool** — let the agent drop a named pin at any location
+2. **Name at creation** — when the user right-clicks to add a pin, the creation
+   popup includes a name field so the pin gets a meaningful label immediately
+   instead of the default "Point N" auto-label. Leaving the field blank still
+   creates the pin with the auto-label.
+3. **Agent `place_pin` tool** — let the agent drop a named pin at any location
    by name or coordinates ("mark the Eiffel Tower", "pin my three offices").
 3. **Agent `describe_pins` tool** — let the agent read all user-placed pins and
    describe each location (country, region, nearest city) using Nominatim
@@ -45,6 +49,10 @@ place and label pins by right-clicking the map. Three gaps remain:
 - No paid geocoder for reverse geocoding.
 
 ## User Stories
+- As a user, I right-click the map, type a name in the popup, and click
+  "Add pin" — the pin appears with my label immediately.
+- As a user, leaving the name field blank still creates the pin with the
+  default "Point N" auto-label.
 - As a user, I can open a pin's edit popup, change the lat/lng fields, and the
   pin moves to the new coordinates immediately.
 - As a user, I can drag a pin to a new position and its coordinates update.
@@ -114,6 +122,26 @@ function updatePointCoords(id: string, lat: number, lng: number) {
 }
 ```
 Export alongside existing actions.
+
+### `MapPanel.vue` — name-at-creation in the context-menu popup
+Replace the existing single "Add point here" button with a small inline form:
+```html
+<div style="min-width:200px;padding:4px">
+  <input id="pin-name-input" type="text" placeholder="Pin name (optional)"
+    style="width:100%;border:1px solid #ccc;border-radius:4px;padding:4px;
+           box-sizing:border-box;margin-bottom:6px"/>
+  <button id="pin-add-btn"
+    style="width:100%;background:#3b82f6;color:#fff;border:none;
+           border-radius:4px;padding:4px 8px;cursor:pointer">Add pin</button>
+</div>
+```
+On "Add pin" click (or Enter key in the name input):
+1. Read the name input value. If non-empty use it as the label; otherwise
+   the default `mapStore.addPoint` auto-label (`"Point N"`) is kept.
+2. `const point = mapStore.addPoint(e.latlng.lat, e.latlng.lng)`
+3. If a name was typed: `mapStore.updatePointLabel(point.id, typedName)`
+4. `placeMarker(L, { ...point, label: typedName || point.label })`
+5. Close the popup.
 
 ### `MapPanel.vue` — coordinate edit in popup
 Extend the existing left-click "edit label" popup to include two additional
@@ -276,11 +304,18 @@ New tests in `mapStore.test.ts`:
 New tests in `MapPanel.test.ts`:
 3. `add_pin` action in `chatStore.pendingMapAction` calls `L.marker` and
    `map.flyTo` with the correct coordinates.
+4. Name field in the creation popup: when a non-empty name is provided,
+   the resulting marker uses that label (verify via `mapStore.points[0].label`).
 
 ---
 
 ## Acceptance Criteria
-1. User opens a pin popup, changes the lat field, clicks Save — the pin moves
+1. User right-clicks the map, types "My office" in the name field, clicks
+   "Add pin" — the pin labelled "My office" appears immediately with no
+   second edit step required.
+2. User right-clicks, leaves the name field blank — pin is created with the
+   auto-label "Point N".
+3. User opens a pin popup, changes the lat field, clicks Save — the pin moves
    to the new coordinate on the map and `mapStore` is updated.
 2. User drags a pin — on `dragend` the `mapStore` lat/lng updates.
 3. Agent tool `place_pin("Burj Khalifa")` places a pin at approximately

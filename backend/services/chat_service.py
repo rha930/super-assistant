@@ -13,7 +13,13 @@ from services.history_repository import ChatHistoryRepository
 from services.history_repository_local import LocalChatHistoryRepository
 from services.history_repository_redis import RedisChatHistoryRepository
 from services.strands_provider import build_agent
-from services.strands_tools import build_fly_to_location_tool, build_generate_graph_tool, build_news_search_tool
+from services.strands_tools import (
+    build_describe_pins_tool,
+    build_fly_to_location_tool,
+    build_generate_graph_tool,
+    build_news_search_tool,
+    build_place_pin_tool,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -43,6 +49,7 @@ class ChatService:
         history: list,
         artifact_store: list,
         callback_handler,
+        widget_context_block: str | None = None,
     ):
         """Build a Strands Agent for this request with the configured provider and tools."""
         gnews = self._build_gnews_service()
@@ -50,6 +57,8 @@ class ChatService:
             build_news_search_tool(gnews),
             build_generate_graph_tool(artifact_store),
             build_fly_to_location_tool(artifact_store),
+            build_place_pin_tool(artifact_store),
+            build_describe_pins_tool(),
         ]
         return build_agent(
             provider=provider,
@@ -58,7 +67,63 @@ class ChatService:
             history=history,
             callback_handler=callback_handler,
             gemini_api_key=GEMINI_API_KEY,
+            widget_context_block=widget_context_block,
         )
+
+    @staticmethod
+    def _zoom_label(zoom: int) -> str:
+        if zoom <= 3:
+            return "world/continent view"
+        if zoom <= 6:
+            return "country/region view"
+        if zoom <= 9:
+            return "city-area view"
+        if zoom <= 12:
+            return "neighbourhood view"
+        return "street-level view"
+
+    @staticmethod
+    def _build_widget_context_block(ctx: dict | None) -> str | None:
+        """Convert a widget_context dict into a natural-language system prompt block."""
+        if not ctx or not isinstance(ctx, dict):
+            return None
+        panel = ctx.get("active_panel")
+        if not panel:
+            return None
+        lines = ["User's current workspace context:", f"- Active widget: {str(panel).title()}"]
+        if panel == "map" and isinstance(ctx.get("map"), dict):
+            m = ctx["map"]
+            try:
+                zoom = int(m.get("zoom", 0))
+            except (TypeError, ValueError):
+                zoom = 0
+            label = ChatService._zoom_label(zoom)
+            lines.append(f"- Map zoom level: {zoom} ({label})")
+            try:
+                lat = float(m["center_lat"])
+                lng = float(m["center_lng"])
+                lines.append(f"- Map center: approximately ({lat:.4f}, {lng:.4f})")
+            except (KeyError, TypeError, ValueError):
+                pass
+            count = m.get("point_count", 0)
+            lines.append(f"- User has placed {count} map pin(s)")
+            pins_json = m.get("pins_json", "")
+            if pins_json and isinstance(pins_json, str) and pins_json != "[]":
+                lines.append(f"- Pin data (label, lat, lng): {pins_json[:500]}")
+        elif panel == "graph" and isinstance(ctx.get("graph"), dict):
+            g = ctx["graph"]
+            lines.append(f"- Graphs displayed: {g.get('chart_count', 0)}")
+            if g.get("active_chart_type"):
+                lines.append(f"- Primary chart type: {g['active_chart_type']}")
+            if g.get("active_chart_title"):
+                lines.append(f"- Primary chart title: {str(g['active_chart_title'])[:200]}")
+        elif panel == "notes" and isinstance(ctx.get("notes"), dict):
+            n = ctx["notes"]
+            if n.get("note_title"):
+                lines.append(f'- Active note: "{str(n["note_title"])[:200]}"')
+            if n.get("note_taking_mode"):
+                lines.append("- Note-taking mode is active: agent responses are being saved to this note.")
+        return "\n".join(lines)
 
     @staticmethod
     def _extract_text_from_result(result) -> str:
@@ -101,6 +166,7 @@ class ChatService:
         message: str,
         conversation_id: str | None = None,
         user_id: str = "anonymous",
+        widget_context: dict | None = None,
     ) -> dict[str, Any]:
         """Process a user message and return the agent's full response."""
         try:
@@ -132,7 +198,13 @@ class ChatService:
                     if name:
                         tool_calls_collected.append({"name": name, "status": "success"})
 
-            agent = self._build_strands_agent(provider, history, artifact_store, _cb)
+            agent = self._build_strands_agent(
+                provider,
+                history,
+                artifact_store,
+                _cb,
+                widget_context_block=self._build_widget_context_block(widget_context),
+            )
             sdk_result = agent(message)
 
             agent_response = self._extract_text_from_result(sdk_result)
@@ -207,6 +279,7 @@ class ChatService:
         message: str,
         conversation_id: str | None = None,
         user_id: str = "anonymous",
+        widget_context: dict | None = None,
     ) -> Generator[dict[str, Any], None, None]:
         """Yield SSE-compatible response chunks from the Strands agent."""
         try:
@@ -256,7 +329,13 @@ class ChatService:
                         }
                     )
 
-            agent = self._build_strands_agent(provider, history, artifact_store, _cb)
+            agent = self._build_strands_agent(
+                provider,
+                history,
+                artifact_store,
+                _cb,
+                widget_context_block=self._build_widget_context_block(widget_context),
+            )
 
             def _run_agent() -> None:
                 try:

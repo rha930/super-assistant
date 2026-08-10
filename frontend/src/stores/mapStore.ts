@@ -54,6 +54,10 @@ export const useMapStore = defineStore('map', () => {
     points.value = points.value.map((p) => (p.id === id ? { ...p, label } : p))
   }
 
+  function updatePointCoords(id: string, lat: number, lng: number) {
+    points.value = points.value.map((p) => (p.id === id ? { ...p, lat, lng } : p))
+  }
+
   return {
     showMapPanel,
     lastCenter,
@@ -66,5 +70,6 @@ export const useMapStore = defineStore('map', () => {
     addPoint,
     removePoint,
     updatePointLabel,
+    updatePointCoords,
   }
 })

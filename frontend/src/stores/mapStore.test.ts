@@ -103,5 +103,22 @@ describe('mapStore', () => {
       expect(store.points.find((p) => p.id === a.id)?.label).toBe('My Place')
       expect(store.points.find((p) => p.id === b.id)?.label).toBe('Point 2')
     })
+
+    it('updatePointCoords changes lat/lng of the correct pin', () => {
+      const store = useMapStore()
+      const a = store.addPoint(10, 10)
+      store.updatePointCoords(a.id, 51.5, -0.1)
+      expect(store.points.find((p) => p.id === a.id)?.lat).toBe(51.5)
+      expect(store.points.find((p) => p.id === a.id)?.lng).toBe(-0.1)
+    })
+
+    it('updatePointCoords leaves other pins unchanged', () => {
+      const store = useMapStore()
+      const a = store.addPoint(10, 10)
+      const b = store.addPoint(20, 20)
+      store.updatePointCoords(a.id, 99, 99)
+      expect(store.points.find((p) => p.id === b.id)?.lat).toBe(20)
+      expect(store.points.find((p) => p.id === b.id)?.lng).toBe(20)
+    })
   })
 })
