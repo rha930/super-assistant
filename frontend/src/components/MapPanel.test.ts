@@ -129,5 +129,29 @@ describe('MapPanel.vue', () => {
     expect(mapStore.points[0]?.label).toBe('Eiffel Tower')
     expect(chatStore.pendingMapAction).toBeNull()
   })
+
+  it('renders a marker for each pin when multiple add_pin actions are queued', async () => {
+    const pinia = createPinia()
+    setActivePinia(pinia)
+    const chatStore = useChatStore()
+    const mapStore = useMapStore()
+
+    mount(MapPanel, { global: { plugins: [pinia] } })
+    await flushPromises()
+
+    chatStore.enqueueMapActions([
+      { action: 'add_pin', lat: 48.86, lng: 2.35, label: 'Eiffel Tower' },
+      { action: 'add_pin', lat: 51.5, lng: -0.12, label: 'Big Ben' },
+      { action: 'add_pin', lat: 41.89, lng: 12.49, label: 'Colosseum' },
+    ])
+    await flushPromises()
+
+    expect(mockL.marker).toHaveBeenCalledTimes(3)
+    expect(mapStore.points).toHaveLength(3)
+    expect(mapStore.points.map((p) => p.label)).toEqual(['Eiffel Tower', 'Big Ben', 'Colosseum'])
+    // Flies to the last pin.
+    expect(mockMapInstance.flyTo).toHaveBeenLastCalledWith([41.89, 12.49], 12)
+    expect(chatStore.pendingMapAction).toBeNull()
+  })
 })
 

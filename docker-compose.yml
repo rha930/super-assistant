@@ -26,10 +26,18 @@ services:
       - AUTH_SECRET_KEY=${AUTH_SECRET_KEY:-}
       - AUTH_USERS_FILE=/app/data/users.json
       - NOMINATIM_VERIFY_SSL=${NOMINATIM_VERIFY_SSL:-false}
+      # Local sample SQLite database exposed to the agent's database_query tool.
+      - DB_CONNECTOR_1_NAME=${DB_CONNECTOR_1_NAME:-sample}
+      - DB_CONNECTOR_1_TYPE=${DB_CONNECTOR_1_TYPE:-sqlite}
+      - DB_CONNECTOR_1_URL=${DB_CONNECTOR_1_URL:-sqlite:///app/sample-db/sample.db}
     volumes:
       - backend-data:/app/data
+      - sqlite-data:/app/sample-db
     extra_hosts:
       - "host.docker.internal:host-gateway"
+    depends_on:
+      sqlite-init:
+        condition: service_completed_successfully
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:5000/api/health"]
       interval: 15s
@@ -37,6 +45,29 @@ services:
       retries: 3
       start_period: 10s
     restart: unless-stopped
+
+  # One-shot service: seeds a sample SQLite database into the shared volume.
+  # SQLite is file-based, so there is no long-running database daemon — this
+  # container creates ./db/sample-init.sql into /data/sample.db and exits.
+  sqlite-init:
+    image: alpine:3.20
+    volumes:
+      - sqlite-data:/data
+      - ./db/sample-init.sql:/init/sample-init.sql:ro
+    command:
+      - sh
+      - -c
+      - |
+        set -e
+        apk add --no-cache sqlite >/dev/null
+        if [ ! -f /data/sample.db ]; then
+          sqlite3 /data/sample.db < /init/sample-init.sql
+          echo "Seeded /data/sample.db"
+        else
+          echo "/data/sample.db already exists — skipping seed"
+        fi
+    restart: "no"
+
 
   frontend:
     build:
@@ -72,4 +103,5 @@ services:
 volumes:
   backend-data:
   redis-data:
+  sqlite-data:
  

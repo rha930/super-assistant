@@ -74,4 +74,23 @@ describe('chatStore', () => {
     store.clearPendingMapAction()
     expect(store.pendingMapAction).toBeNull()
   })
+
+  it('enqueueMapActions queues multiple actions in order', () => {
+    const store = useChatStore()
+    store.enqueueMapActions([
+      { action: 'add_pin', lat: 1, lng: 1, label: 'A' },
+      { action: 'add_pin', lat: 2, lng: 2, label: 'B' },
+    ])
+    store.enqueueMapActions([{ action: 'add_pin', lat: 3, lng: 3, label: 'C' }])
+    expect(store.pendingMapActions).toHaveLength(3)
+    expect(store.pendingMapActions.map((a) => a.label)).toEqual(['A', 'B', 'C'])
+    expect(store.pendingMapAction).toEqual({ action: 'add_pin', lat: 1, lng: 1, label: 'A' })
+  })
+
+  it('enqueueMapActions ignores an empty list', () => {
+    const store = useChatStore()
+    store.enqueueMapActions([])
+    expect(store.pendingMapActions).toHaveLength(0)
+    expect(store.pendingMapAction).toBeNull()
+  })
 })

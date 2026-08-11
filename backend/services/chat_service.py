@@ -8,12 +8,14 @@ from typing import Any
 from config import GEMINI_API_KEY, GNEWS_API_KEY
 from models.message import Message
 from services.config_service import get_config_service
+from services.database_service import DatabaseConnectorService
 from services.gnews_service import GNewsService
 from services.history_repository import ChatHistoryRepository
 from services.history_repository_local import LocalChatHistoryRepository
 from services.history_repository_redis import RedisChatHistoryRepository
 from services.strands_provider import build_agent
 from services.strands_tools import (
+    build_database_query_tool,
     build_describe_pins_tool,
     build_fly_to_location_tool,
     build_generate_graph_tool,
@@ -43,6 +45,16 @@ class ChatService:
     def _build_gnews_service(self) -> GNewsService:
         return GNewsService(self.config.get("gnews", {}), api_key=GNEWS_API_KEY)
 
+    def _build_database_service(self) -> DatabaseConnectorService:
+        from config import DB_CONNECTORS
+
+        db_cfg = self.config.get("database_connectors", {})
+        return DatabaseConnectorService(
+            connector_defs=DB_CONNECTORS,
+            timeout_seconds=int(db_cfg.get("timeout_seconds", 10)),
+            max_rows=int(db_cfg.get("max_rows", 100)),
+        )
+
     def _build_strands_agent(
         self,
         provider: str,
@@ -50,6 +62,7 @@ class ChatService:
         artifact_store: list,
         callback_handler,
         widget_context_block: str | None = None,
+        db_activity: list | None = None,
     ):
         """Build a Strands Agent for this request with the configured provider and tools."""
         gnews = self._build_gnews_service()
@@ -60,6 +73,31 @@ class ChatService:
             build_place_pin_tool(artifact_store),
             build_describe_pins_tool(),
         ]
+
+        # Register the database tool only when at least one connector is reachable.
+        db_service = self._build_database_service()
+        connectors = db_service.list_connectors()
+        connected = [c["name"] for c in connectors if c.get("status") == "connected"]
+        if connected:
+            tools.append(build_database_query_tool(db_service, activity_sink=db_activity))
+            db_lines = [
+                "Available database connectors for the database_query tool (read-only SELECT/WITH queries only):"
+            ]
+            for name in connected:
+                schema = db_service.get_schema(name)
+                schema_tables = schema.get("tables", [])
+                if schema_tables:
+                    table_desc = "; ".join(f"{t['name']}({', '.join(t['columns'])})" for t in schema_tables)
+                    db_lines.append(f"- {name}: {table_desc}")
+                else:
+                    db_lines.append(f"- {name}")
+            db_lines.append(
+                "Use the exact table and column names shown above, and quote text "
+                "values with single quotes (e.g. WHERE country = 'France')."
+            )
+            db_block = "\n".join(db_lines)
+            widget_context_block = f"{widget_context_block}\n\n{db_block}" if widget_context_block else db_block
+
         return build_agent(
             provider=provider,
             config=self.config,
@@ -69,6 +107,22 @@ class ChatService:
             gemini_api_key=GEMINI_API_KEY,
             widget_context_block=widget_context_block,
         )
+
+    @staticmethod
+    def _merge_db_activity(tool_calls: list, db_activity: list) -> None:
+        """Enrich database_query tool-call entries with detailed activity records.
+
+        The generic callback records only {name, status}; database_query records
+        detailed {duration, inputs, outputs} into db_activity in call order.
+        """
+        if not db_activity:
+            return
+        pending = list(db_activity)
+        for entry in tool_calls:
+            if entry.get("name") == "database_query" and "duration" not in entry and pending:
+                entry.update(pending.pop(0))
+        # Any activity records without a matching callback entry are appended.
+        tool_calls.extend(pending)
 
     @staticmethod
     def _zoom_label(zoom: int) -> str:
@@ -190,6 +244,7 @@ class ChatService:
 
             artifact_store: list = []
             tool_calls_collected: list = []
+            db_activity: list = []
 
             def _cb(**event: Any) -> None:
                 if "current_tool_use" in event:
@@ -204,11 +259,13 @@ class ChatService:
                 artifact_store,
                 _cb,
                 widget_context_block=self._build_widget_context_block(widget_context),
+                db_activity=db_activity,
             )
             sdk_result = agent(message)
 
             agent_response = self._extract_text_from_result(sdk_result)
             artifacts = list(artifact_store)
+            self._merge_db_activity(tool_calls_collected, db_activity)
 
             logger.info(
                 "Strands agent completed (sync): conversation_id=%s artifacts=%s tools=%s",
@@ -291,6 +348,7 @@ class ChatService:
 
             artifact_store: list = []
             tool_calls_tracking: list = []
+            db_activity: list = []
             event_queue: queue.Queue = queue.Queue()
 
             def _cb(**event: Any) -> None:
@@ -318,6 +376,7 @@ class ChatService:
                 elif "result" in event:
                     for tc in tool_calls_tracking:
                         tc["status"] = "success"
+                    self._merge_db_activity(tool_calls_tracking, db_activity)
                     event_queue.put(
                         {
                             "chunk": "",
@@ -335,6 +394,7 @@ class ChatService:
                 artifact_store,
                 _cb,
                 widget_context_block=self._build_widget_context_block(widget_context),
+                db_activity=db_activity,
             )
 
             def _run_agent() -> None:

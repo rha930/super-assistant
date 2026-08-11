@@ -52,4 +52,24 @@ describe('configStore', () => {
     expect(store.geminiModels).toEqual([])
     expect(store.geminiAvailable).toBe(false)
   })
+
+  it('loadDatabaseConnectors populates state from the API', async () => {
+    const connectors = [
+      { name: 'analytics', type: 'postgresql', status: 'connected' },
+      { name: 'legacy', type: 'mysql', status: 'unreachable' }
+    ]
+    ;(api.get as any).mockResolvedValue({ data: { data: { connectors } } })
+    const store = useConfigStore()
+    await store.loadDatabaseConnectors()
+    expect(store.databaseConnectors).toEqual(connectors)
+    expect(store.databaseConnectorsLoading).toBe(false)
+  })
+
+  it('loadDatabaseConnectors resets to empty list on failure', async () => {
+    ;(api.get as any).mockRejectedValue(new Error('network'))
+    const store = useConfigStore()
+    await store.loadDatabaseConnectors()
+    expect(store.databaseConnectors).toEqual([])
+    expect(store.databaseConnectorsLoading).toBe(false)
+  })
 })

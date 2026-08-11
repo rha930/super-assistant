@@ -34,7 +34,8 @@ export const useChatStore = defineStore('chat', () => {
   const isLoadingConversations = ref<boolean>(false)
   const graphsByConversationId = ref<Map<string, GraphPayload[]>>(new Map())
   const selectedGraphIdByConversationId = ref<Map<string, string>>(new Map())
-  const pendingMapAction = ref<MapAction | null>(null)
+  const pendingMapActions = ref<MapAction[]>([])
+  const pendingMapAction = computed(() => pendingMapActions.value[0] ?? null)
   const uiStore = useUIStore()
 
   const addMessage = (message: Message) => {
@@ -89,11 +90,16 @@ export const useChatStore = defineStore('chat', () => {
   }
 
   const setPendingMapAction = (action: MapAction) => {
-    pendingMapAction.value = action
+    pendingMapActions.value = [action]
+  }
+
+  const enqueueMapActions = (actions: MapAction[]) => {
+    if (actions.length === 0) return
+    pendingMapActions.value = [...pendingMapActions.value, ...actions]
   }
 
   const clearPendingMapAction = () => {
-    pendingMapAction.value = null
+    pendingMapActions.value = []
   }
 
   function _buildWidgetContext() {
@@ -236,12 +242,11 @@ export const useChatStore = defineStore('chat', () => {
               if (graphs.length > 0) {
                 addGraphs(graphs)
               }
-              // Route map_action artifacts
-              for (const artifact of artifactSource) {
-                if (artifact?.type === 'map_action') {
-                  setPendingMapAction(artifact as MapAction)
-                }
-              }
+              // Route map_action artifacts (queue all so multiple pins render)
+              const mapActions = artifactSource.filter(
+                (artifact: { type?: string }) => artifact?.type === 'map_action',
+              ) as MapAction[]
+              enqueueMapActions(mapActions)
             }
             uiStore.clearThinking()
           }
@@ -310,6 +315,7 @@ export const useChatStore = defineStore('chat', () => {
     selectedGraphId,
     selectedGraph,
     pendingMapAction,
+    pendingMapActions,
     addMessage,
     updateMessage,
     sendMessage,
@@ -319,6 +325,7 @@ export const useChatStore = defineStore('chat', () => {
     addGraphs,
     selectGraph,
     setPendingMapAction,
+    enqueueMapActions,
     clearPendingMapAction,
   }
 })

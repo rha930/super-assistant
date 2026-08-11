@@ -36,6 +36,7 @@ import { ref, watch, onMounted, onBeforeUnmount, nextTick } from 'vue'
 import type { MapPoint } from '../stores/mapStore'
 import { useMapStore } from '../stores/mapStore'
 import { useChatStore } from '../stores/chatStore'
+import type { MapAction } from '../stores/chatStore'
 import { useNavStore } from '../stores/navStore'
 
 const mapStore = useMapStore()
@@ -246,23 +247,28 @@ onBeforeUnmount(() => {
   map = null
 })
 
-// Fly to location or add pin when the agent emits a map_action artifact
+// Fly to location or add pins when the agent emits map_action artifacts
 watch(
-  () => chatStore.pendingMapAction,
-  (action) => {
-    if (!action) return
+  () => chatStore.pendingMapActions,
+  (actions) => {
+    if (!actions || actions.length === 0) return
     if (navStore.activeModule !== 'map') navStore.selectModule('map')
     nextTick(() => {
-      if (action.action === 'add_pin') {
-        const point = mapStore.addPoint(action.lat, action.lng)
-        const label = action.label || point.label
-        mapStore.updatePointLabel(point.id, label)
-        placeMarker((window as any).L, { ...point, label })
-        map?.flyTo([action.lat, action.lng], action.zoom ?? 12)
-        mapStore.setView([action.lat, action.lng], action.zoom ?? 12)
-      } else if (action.action === 'fly_to') {
-        map?.flyTo([action.lat, action.lng], action.zoom ?? 10)
-        mapStore.setView([action.lat, action.lng], action.zoom ?? 10)
+      const L = (window as any).L
+      let last: MapAction | null = null
+      for (const action of actions) {
+        if (action.action === 'add_pin') {
+          const point = mapStore.addPoint(action.lat, action.lng)
+          const label = action.label || point.label
+          mapStore.updatePointLabel(point.id, label)
+          placeMarker(L, { ...point, label })
+        }
+        last = action
+      }
+      if (last) {
+        const zoom = last.zoom ?? (last.action === 'add_pin' ? 12 : 10)
+        map?.flyTo([last.lat, last.lng], zoom)
+        mapStore.setView([last.lat, last.lng], zoom)
       }
       chatStore.clearPendingMapAction()
     })

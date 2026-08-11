@@ -63,6 +63,38 @@ GNEWS_LANGUAGE = os.getenv("GNEWS_LANGUAGE", "en")
 GNEWS_COUNTRY = os.getenv("GNEWS_COUNTRY", "us")
 GNEWS_TIMEOUT_SECONDS = int(os.getenv("GNEWS_TIMEOUT_SECONDS", "10"))
 
+# Database Connectors — connection URLs are environment-only, never stored in
+# DEFAULT_CONFIG, never returned by an endpoint, and never logged.
+DB_QUERY_TIMEOUT_SECONDS = int(os.getenv("DB_QUERY_TIMEOUT_SECONDS", "10"))
+DB_QUERY_MAX_ROWS = int(os.getenv("DB_QUERY_MAX_ROWS", "100"))
+
+
+def _load_db_connectors_from_env() -> list[dict]:
+    """Parse DB_CONNECTOR_<N>_NAME/TYPE/URL env vars into connector definitions.
+
+    Returns a list of {name, type, url} dicts. The url is kept private to the
+    DatabaseConnectorService and is never exposed via config or any endpoint.
+    Scans indices 1..N until the first index with no NAME is encountered.
+    """
+    connectors: list[dict] = []
+    index = 1
+    while True:
+        name = os.getenv(f"DB_CONNECTOR_{index}_NAME", "").strip()
+        if not name:
+            break
+        connectors.append(
+            {
+                "name": name,
+                "type": os.getenv(f"DB_CONNECTOR_{index}_TYPE", "").strip().lower(),
+                "url": os.getenv(f"DB_CONNECTOR_{index}_URL", "").strip(),
+            }
+        )
+        index += 1
+    return connectors
+
+
+DB_CONNECTORS = _load_db_connectors_from_env()
+
 # Authentication
 AUTH_ENABLED = os.getenv("AUTH_ENABLED", "True") == "True"
 AUTH_SECRET_KEY = os.getenv("AUTH_SECRET_KEY", "")
@@ -124,5 +156,11 @@ DEFAULT_CONFIG = {
         "country": GNEWS_COUNTRY,
         "timeout_seconds": GNEWS_TIMEOUT_SECONDS,
         # GNEWS_API_KEY is never stored here — read from env at runtime only
+    },
+    "database_connectors": {
+        "timeout_seconds": DB_QUERY_TIMEOUT_SECONDS,
+        "max_rows": DB_QUERY_MAX_ROWS,
+        # Connector names/types are served dynamically via /api/database/connectors,
+        # not baked into DEFAULT_CONFIG. Connection URLs are never stored here.
     },
 }

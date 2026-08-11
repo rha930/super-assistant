@@ -32,6 +32,12 @@ const DEFAULT_CONFIG: Config = {
   }
 }
 
+export interface DatabaseConnector {
+  name: string
+  type: string
+  status: 'connected' | 'unreachable' | 'not_configured'
+}
+
 export const useConfigStore = defineStore('config', () => {
   const config = ref<Config>(DEFAULT_CONFIG)
   const availableModels = ref<string[]>([])
@@ -39,6 +45,8 @@ export const useConfigStore = defineStore('config', () => {
   const modelsError = ref<string | null>(null)
   const geminiModels = ref<string[]>([])
   const geminiAvailable = ref(false)
+  const databaseConnectors = ref<DatabaseConnector[]>([])
+  const databaseConnectorsLoading = ref(false)
 
   // Model list for the currently selected provider.
   const activeModels = computed<string[]>(() =>
@@ -96,6 +104,19 @@ export const useConfigStore = defineStore('config', () => {
     }
   }
 
+  const loadDatabaseConnectors = async () => {
+    databaseConnectorsLoading.value = true
+    try {
+      const response = await api.get('/api/database/connectors')
+      databaseConnectors.value = response.data?.data?.connectors || []
+    } catch (error) {
+      databaseConnectors.value = []
+      console.error('Failed to load database connectors:', error)
+    } finally {
+      databaseConnectorsLoading.value = false
+    }
+  }
+
   const resetConfig = () => {
     config.value = DEFAULT_CONFIG
   }
@@ -107,12 +128,15 @@ export const useConfigStore = defineStore('config', () => {
     modelsError,
     geminiModels,
     geminiAvailable,
+    databaseConnectors,
+    databaseConnectorsLoading,
     activeModels,
     getConfig,
     loadAvailableModels,
     loadGeminiModels,
     saveConfig,
     loadConfig,
+    loadDatabaseConnectors,
     resetConfig
   }
 })
