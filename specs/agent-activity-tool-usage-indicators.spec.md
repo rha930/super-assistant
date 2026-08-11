@@ -4,7 +4,45 @@
 Surface real-time agent activity — especially tool invocations — in the chat window so users can see what the agent is doing, not just the final text response.
 
 ## Problem Statement
-The chat currently shows a single generic "thinking" indicator (e.g., "Analyzing context…", "Drafting response…") that cycles through hardcoded phases unrelated to actual agent behavior. When the agent uses tools (web search, knowledge base, graph generation), the user has no visibility into those actions. The `tool_calls` metadata is captured but only rendered as a minimal count badge ("Tool calls: 2") on the final message — no tool names, inputs, outputs, or timing are shown.
+The chat currently shows a single generic "thinking" indicator (e.g., "Analyzing context…", "Drafting response…") that cycles through hardcoded phases unrelated to actual agent behavior. When the agent uses tools (web search, knowledge base, graph generation), the user has no visibility into those actions. The `tool_calls` metadata is captured but only rendered as a minimal count badge ("Tool calls: 2") on the final message — no tool names, inputs, outputs, timing, or **ordered sequence of steps** are shown. When the agent runs several tools in one turn, the user cannot see which tools ran or in what order.
+
+---
+
+## Implementation Status (2026-08)
+
+A first slice has shipped: the streaming path now surfaces live tool usage and
+every response carries an **ordered** `tool_calls` list. The richer per-tool
+activity log, the ordered step trail, and the dedicated `ToolActivity.vue`
+component are still outstanding.
+
+**Implemented**
+- Streaming callback in [chat_service.py](../backend/services/chat_service.py)
+  (`stream_message._cb`) emits a running, **ordered** `tool_calls` list in each
+  SSE event's `metadata.tool_calls`, and a `thinking: "Using <tool>..."` label
+  when a tool starts. On the final `result` event every entry is flipped to
+  `status: "success"`.
+- Sync path (`process_message`) collects the same ordered `tool_calls` via the
+  agent callback and returns them in `metadata.tool_calls`.
+- `database_query` records a **detailed** activity record
+  (`{name, status, duration, inputs, outputs}`, counts only) through an
+  `activity_sink`; `_merge_db_activity` merges these into `tool_calls` in call
+  order (see [strands_tools.py](../backend/services/strands_tools.py) and
+  [chat_service.py](../backend/services/chat_service.py)).
+- Frontend consumes `payload.thinking`
+  ([uiStore.ts](../frontend/src/stores/uiStore.ts) → `setThinking`) and shows it
+  with a pulsing label in [ChatWindow.vue](../frontend/src/components/ChatWindow.vue).
+- [Message.vue](../frontend/src/components/Message.vue) renders a minimal
+  `Tool calls: N` badge from `metadata.tool_calls`.
+
+**Remaining**
+- Ordered, expandable **step trail** in the message showing each tool the agent
+  ran, in sequence (the focus of this update — see "Multi-Tool Step Sequence").
+- `ToolActivity.vue` component and the richer per-tool row (icon, duration,
+  input/output summary).
+- Consistent enrichment (`display_name`, `input_summary`, `output_summary`,
+  `duration_ms`) for **all** tools, not just `database_query`.
+- Context-aware thinking labels beyond the generic `Using <tool>...`.
+- Rich `ToolCall` typing in `types/message.ts` (currently `{ name?, input? }`).
 
 ## Goals
 - Show live, contextual status updates that reflect what the agent is actually doing (e.g., "Searching the web…", "Querying knowledge base…").
@@ -23,6 +61,7 @@ The chat currently shows a single generic "thinking" indicator (e.g., "Analyzing
 ## User Stories
 - As a user, I can see a live status label that updates to reflect the agent's current action (e.g., "Searching the web for…").
 - As a user, I can see a tool activity section in the agent's message after it completes, showing which tools were used.
+- As a user, when the agent runs several tools in one turn, I can see the **ordered steps** it took (step 1, step 2, …) and how many times each tool ran.
 - As a user, I can expand a tool call to see its name, a brief input summary, result summary, and how long it took.
 - As a user, I can tell at a glance whether a tool succeeded or failed via an icon/color indicator.
 
@@ -30,50 +69,87 @@ The chat currently shows a single generic "thinking" indicator (e.g., "Analyzing
 
 ## Architecture
 
-### Streaming Event Extension
+### Streaming Events (as implemented)
 
-Currently the backend emits these SSE event shapes:
+The streaming path ([chat_service.py](../backend/services/chat_service.py) →
+`stream_message`) drives a callback that pushes events onto a queue. Each SSE
+event already carries an **ordered** `tool_calls` list under `metadata`, so the
+frontend can reconstruct the exact sequence of tools the agent used.
+
+Text chunk event:
 ```json
-{ "chunk": "...", "done": false, "thinking": "Drafting response..." }
-{ "chunk": "", "done": true, "metadata": { "tool_calls": [...] } }
+{ "chunk": "...", "done": false,
+  "metadata": { "tool_calls": [ { "name": "web_search", "status": "in_progress" } ] } }
 ```
 
-This spec adds a new `tool_event` field to the stream:
+Tool-start event (a new tool was invoked):
 ```json
-{
-  "chunk": "",
-  "done": false,
-  "thinking": "Searching the web...",
-  "tool_event": {
-    "id": "tool_1719700000_websearch",
-    "name": "web_search",
-    "status": "started",
-    "display_name": "Web Search",
-    "input_summary": "query: 'kubernetes pod health check'",
-    "timestamp": "2026-07-01T12:00:00Z"
-  }
-}
+{ "chunk": "", "done": false, "thinking": "Using web_search...",
+  "metadata": { "tool_calls": [ { "name": "web_search", "status": "in_progress" } ] } }
 ```
 
-When the tool completes:
+Final event (all steps resolved, in call order):
 ```json
-{
-  "chunk": "",
-  "done": false,
-  "thinking": "Processing search results...",
-  "tool_event": {
-    "id": "tool_1719700000_websearch",
-    "name": "web_search",
-    "status": "completed",
-    "display_name": "Web Search",
-    "output_summary": "Found 3 relevant results",
-    "duration_ms": 1230,
-    "timestamp": "2026-07-01T12:00:01.230Z"
-  }
-}
+{ "chunk": "", "done": true,
+  "metadata": {
+    "tool_calls": [
+      { "name": "web_search", "status": "success" },
+      { "name": "database_query", "status": "success",
+        "duration": 1230, "inputs": { "connector_name": "sample", "sql": "..." },
+        "outputs": { "row_count": 3, "truncated": false } }
+    ],
+    "artifacts": [ ... ], "provider": "ollama", "model": "..." } }
 ```
 
-Tool event statuses: `started`, `completed`, `failed`.
+Notes vs. the original design:
+- Instead of a separate `tool_event` object, the running list lives in
+  `metadata.tool_calls` and grows in **call order** as tools fire.
+- Statuses used today are `in_progress` and `success` (plus `error` for
+  `database_query`). The original `started`/`completed`/`failed` naming is the
+  target for the enrichment step below.
+- Only `database_query` currently carries `duration`/`inputs`/`outputs`; other
+  tools carry `{name, status}` only.
+
+### Target enrichment (delta)
+
+To power the full activity log, each tool invocation should converge on:
+```json
+{ "id": "str", "name": "str", "display_name": "str",
+  "status": "started | completed | failed",
+  "input_summary": "str", "output_summary": "str",
+  "duration_ms": 0, "error": "str" }
+```
+
+---
+
+## Multi-Tool Step Sequence
+
+When the agent runs more than one tool in a single turn (e.g., web search →
+database query → place pin), the UI must show the **ordered steps** it took, not
+just a count. This is the primary enhancement in this revision.
+
+Requirements:
+1. **Preserve order** — `metadata.tool_calls` is appended in call order by the
+   streaming callback and by `_merge_db_activity`; the frontend must render steps
+   in that array order.
+2. **Number the steps** — display as an ordered trail (`1`, `2`, `3`, …), each
+   labelled with the tool's display name and a status icon.
+3. **Live progression** — during streaming, each tool-start event adds the next
+   step with an in-progress spinner; the final event flips completed steps to
+   success/failure.
+4. **Do not collapse repeats** — if the same tool runs multiple times (e.g.,
+   three `place_pin` calls), show each as its own numbered step so the user sees
+   exactly how many times it ran.
+5. **Summarize per step** — where available, show the step's input/output
+   summary (e.g., `place_pin → "Eiffel Tower"`, `database_query → 3 rows`).
+
+Example trail (expanded):
+```
+🔧 3 steps  ▾
+1. ✅ Web Search        1.2s   query: 'pod health check' → 3 results
+2. ✅ Database Query    0.3s   sample → 3 rows
+3. ✅ Place Pin         0.1s   "Eiffel Tower"
+```
 
 ---
 
@@ -81,12 +157,31 @@ Tool event statuses: `started`, `completed`, `failed`.
 
 ### 1. Tool Event Emission in Streaming
 
-Modify the streaming path in `services/chat_service.py` and `routes/chat.py` to emit `tool_event` payloads when tools are invoked.
+> **Status: partially implemented.** The streaming callback already emits an
+> ordered `tool_calls` list per event (`{name, status}`) and a `thinking`
+> label on tool start. Remaining: per-tool enrichment (`display_name`,
+> `input_summary`, `output_summary`, `duration_ms`) for tools other than
+> `database_query`, and explicit start/complete transitions.
 
-Each tool service (graph artifact, knowledge base, web search, etc.) should yield or callback a tool event at start and completion:
+Extend the streaming path in [chat_service.py](../backend/services/chat_service.py) (`stream_message`) so every tool emits enriched activity when it is invoked. The list **must remain ordered by call sequence and must not collapse repeated invocations of the same tool** — each call is its own step.
+
+Each tool service (graph artifact, knowledge base, web search, database query, place pin, etc.) should record an activity entry at start and completion. The `database_query` `activity_sink` pattern is the reference implementation to generalize:
 
 ```python
-# Tool event schema
+# Detailed activity record (as implemented for database_query)
+{
+    "name": str,        # Internal tool name (e.g., "database_query")
+    "status": str,      # "in_progress" | "success" | "error"
+    "duration": int,    # Elapsed time in ms
+    "inputs": dict,     # Sanitized/truncated input description
+    "outputs": dict,    # Counts only — never raw row data
+}
+```
+
+Target schema to converge on for all tools:
+
+```python
+# Tool event schema (target)
 {
     "id": str,              # Unique ID for this invocation
     "name": str,            # Internal tool name (e.g., "web_search")
@@ -102,7 +197,11 @@ Each tool service (graph artifact, knowledge base, web search, etc.) should yiel
 
 ### 2. Thinking Text Derived from Tool Events
 
-Replace the hardcoded chunk-count-based thinking text in `routes/chat.py` with context-aware labels:
+> **Status: partially implemented.** Streaming currently emits a generic
+> `Using <tool>...` label on each tool start. The context-aware mapping below
+> is the target refinement.
+
+Replace the generic `Using <tool>...` label with context-aware labels:
 
 | Agent State | Thinking Text |
 |---|---|
@@ -116,7 +215,11 @@ Replace the hardcoded chunk-count-based thinking text in `routes/chat.py` with c
 
 ### 3. Tool Metadata on Final Message
 
-The final `done: true` event should include the full list of tool events in `metadata.tool_calls`, replacing the current empty array:
+> **Status: implemented.** The final `done: true` event carries the ordered
+> `metadata.tool_calls` list; `database_query` entries include
+> `duration`/`inputs`/`outputs`. Enrichment for other tools is pending.
+
+The final `done: true` event includes the full ordered list of tool invocations in `metadata.tool_calls`:
 
 ```json
 {
@@ -142,6 +245,11 @@ The final `done: true` event should include the full list of tool events in `met
 ## Frontend Requirements
 
 ### 1. Type Updates (`types/message.ts`)
+
+> **Status: not started.** The current type is
+> `tool_calls?: Array<{ name?: string; input?: Record<string, unknown> }>`.
+> Extend it to the richer `ToolCall` shape below (order in the array is
+> significant — it is the step sequence).
 
 Extend the `tool_calls` type in the `Message` metadata:
 
@@ -169,39 +277,51 @@ export interface Message {
 
 ### 2. Stream Handler Updates (`stores/chatStore.ts`)
 
-When a `tool_event` payload arrives in the SSE stream:
-- If `status === 'started'`: append to the in-progress message's `metadata.tool_calls` array.
-- If `status === 'completed'` or `'failed'`: update the matching entry by `id` with output, duration, and final status.
-- Update `uiStore.thinkingText` with the `thinking` value from the event.
+> **Status: partially implemented.** `chatStore` already reads `payload.thinking`
+> (→ `uiStore.setThinking`) and applies `metadata.tool_calls` on the `done`
+> event. Remaining: apply the **ordered** `tool_calls` list from *interim*
+> events too, so steps appear live rather than only at completion.
+
+The stream carries an ordered `tool_calls` list in every event's `metadata`:
+- On each event, replace the in-progress message's `metadata.tool_calls` with
+  the latest ordered list (it only grows and is already in call order).
+- Preserve array order exactly — it **is** the step sequence; never sort or
+  de-duplicate repeated tools.
+- Update `uiStore.thinkingText` with the `thinking` value when present.
 
 ### 3. Tool Activity Component (`components/ToolActivity.vue`)
 
-A new component rendered inside `Message.vue` for agent messages that have tool calls:
+> **Status: not started.** No `ToolActivity.vue` exists yet; `Message.vue` shows
+> only a `Tool calls: N` badge.
+
+A new component rendered inside `Message.vue` for agent messages that have tool calls. It renders the **ordered step trail** described in "Multi-Tool Step Sequence".
 
 **Collapsed state (default):**
 ```
-🔧 3 tools used  ▸
+🔧 3 steps  ▸
 ```
 
-**Expanded state:**
+**Expanded state (numbered, in execution order):**
 ```
-🔧 3 tools used  ▾
+🔧 3 steps  ▾
 ┌──────────────────────────────────────────┐
-│ ✅ Web Search                    1.2s    │
+│ 1. ✅ Web Search                 1.2s    │
 │    query: 'kubernetes pod health check'  │
 │    Found 3 relevant results              │
 ├──────────────────────────────────────────┤
-│ ✅ Knowledge Base Search         0.3s    │
-│    query: 'pod restart runbook'          │
-│    2 matching documents                  │
+│ 2. ✅ Database Query             0.3s    │
+│    sample → 3 rows                       │
 ├──────────────────────────────────────────┤
-│ ❌ Graph Generation              0.8s    │
+│ 3. ❌ Graph Generation           0.8s    │
 │    Error: insufficient data points       │
 └──────────────────────────────────────────┘
 ```
 
 **Design details:**
-- Status icons: `✅` completed, `❌` failed, `⏳` in-progress (animated spinner).
+- Steps are **numbered and rendered in execution order**; a tool that runs more
+  than once appears as multiple separate steps (never merged).
+- Status icons: `✅` success/completed, `❌` error/failed, `⏳` in-progress
+  (animated spinner).
 - Duration right-aligned.
 - Input/output summaries shown as muted secondary text.
 - Respects current theme (light/dark).
@@ -218,6 +338,9 @@ While the agent is actively using a tool (between `started` and `completed` even
 Replace the current generic pulsing text with the `thinking` value from the stream event, which now reflects actual tool usage.
 
 ### 5. Message Component Updates (`components/Message.vue`)
+
+> **Status: partially implemented.** `Message.vue` currently renders a
+> `Tool calls: N` badge; replace it with the `ToolActivity` step trail.
 
 - Replace the existing `Tool calls: N` badge with the `ToolActivity` component.
 - Only render `ToolActivity` when `message.metadata.tool_calls` is non-empty.
@@ -237,16 +360,38 @@ Replace the current generic pulsing text with the `thinking` value from the stre
 ## Testing Requirements
 
 ### Backend
-1. **Unit test**: Tool event emission produces correct schema (`id`, `name`, `status`, `timestamp`).
-2. **Unit test**: Thinking text updates correctly based on tool events.
-3. **Integration test**: Streaming endpoint emits `tool_event` payloads between chunk events when a tool is invoked.
-4. **Edge case**: Tool failure emits a `failed` event with error summary, stream continues.
+1. **Unit test**: The streaming callback records tool invocations in an ordered `tool_calls` list (`{name, status}`) in call order. _(base behavior implemented)_
+2. **Unit test**: Multiple tool calls in one turn produce one ordered step per invocation, and repeated calls of the same tool are **not** collapsed.
+3. **Unit test**: `_merge_db_activity` merges detailed `database_query` records (`duration`, `inputs`, `outputs`) into the matching `tool_calls` entry in order. _(covered via `database_query` activity_sink tests)_
+4. **Unit test**: Thinking text updates to reflect the active tool on a tool-start event.
+5. **Integration test**: Streaming endpoint emits the growing `metadata.tool_calls` list between chunk events when tools are invoked.
+6. **Edge case**: A tool failure records an `error`/`failed` step with a sanitized summary and the stream continues.
 
 ### Frontend
-1. **Unit test**: `ToolActivity.vue` renders correct count, icons, and labels for completed/failed tools.
-2. **Unit test**: Expand/collapse toggles visibility of tool details.
-3. **Unit test**: `chatStore` correctly appends and updates tool calls from stream events.
-4. **Integration test**: End-to-end stream with tool events renders live indicator and final tool activity section.
+1. **Unit test**: `ToolActivity.vue` renders the correct step count, numbered steps in order, icons, and labels for success/failed steps.
+2. **Unit test**: Repeated tools render as separate numbered steps (no de-duplication).
+3. **Unit test**: Expand/collapse toggles visibility of the step trail.
+4. **Unit test**: `chatStore` applies the ordered `tool_calls` list from interim and final stream events, preserving order.
+5. **Integration test**: End-to-end stream with multiple tools renders the live indicator and the final ordered step trail.
+
+---
+
+## Acceptance Criteria
+
+1. When the agent runs multiple tools in one turn, the completed message shows an
+   **ordered, numbered step trail** reflecting exactly which tools ran and in what
+   sequence.
+2. Repeated invocations of the same tool appear as distinct steps (e.g., three
+   `place_pin` calls → 3 steps), never merged into one.
+3. The step trail is collapsed by default (`🔧 N steps`) and expands to show each
+   step's status icon, duration (where available), and input/output summary.
+4. During streaming, a live thinking indicator reflects the active tool, and steps
+   appear/progress as tools start and complete.
+5. `database_query` steps display their row-count summary; other tools display at
+   least name + status until per-tool enrichment lands.
+6. No raw payloads, credentials, or PII are surfaced; summaries are truncated.
+7. Backend and frontend test suites (including the new ordered/multi-tool tests)
+   pass.
 
 ---
 
