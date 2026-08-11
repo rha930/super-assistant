@@ -154,3 +154,21 @@ class TestIsAvailable:
 
     def test_false_for_unknown_connector(self, sqlite_db):
         assert _svc(sqlite_db).is_available("missing") is False
+
+
+# ---------------------------------------------------------------------------
+# get_schema
+# ---------------------------------------------------------------------------
+class TestGetSchema:
+    def test_returns_tables_and_columns(self, sqlite_db):
+        schema = _svc(sqlite_db).get_schema("analytics")
+        tables = {t["name"]: t["columns"] for t in schema["tables"]}
+        assert "customers" in tables
+        assert tables["customers"] == ["id", "name"]
+
+    def test_unknown_connector_returns_empty(self, sqlite_db):
+        assert _svc(sqlite_db).get_schema("missing") == {"tables": []}
+
+    def test_never_includes_sqlite_internal_tables(self, sqlite_db):
+        schema = _svc(sqlite_db).get_schema("analytics")
+        assert all(not t["name"].startswith("sqlite_") for t in schema["tables"])

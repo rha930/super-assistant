@@ -113,6 +113,58 @@ class DatabaseConnectorService:
             return False
         return self._check_connectivity(connector_name, meta)
 
+    def get_schema(self, connector_name: str, max_tables: int = 30, max_columns: int = 50) -> dict:
+        """Return {tables: [{name, columns: [...]}]} via read-only introspection.
+
+        Best-effort: returns {"tables": []} if the connector is unknown,
+        unconfigured, or introspection fails. Never includes the URL/credentials.
+        """
+        meta = self._connectors.get(connector_name)
+        if meta is None or not meta["is_configured"]:
+            return {"tables": []}
+        try:
+            conn = self._connect(meta)
+        except Exception as exc:  # noqa: BLE001 - introspection is best-effort
+            logger.warning("Schema connect failed for %r: %s", connector_name, type(exc).__name__)
+            return {"tables": []}
+        try:
+            return self._introspect_schema(meta, conn, max_tables, max_columns)
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("Schema introspection failed for %r: %s", connector_name, type(exc).__name__)
+            return {"tables": []}
+        finally:
+            with contextlib.suppress(Exception):
+                conn.close()
+
+    def _introspect_schema(self, meta: dict, conn, max_tables: int, max_columns: int) -> dict:
+        db_type = meta["type"]
+        cursor = conn.cursor()
+        if db_type == "sqlite":
+            cursor.execute(
+                "SELECT name FROM sqlite_master WHERE type = 'table' AND name NOT LIKE 'sqlite_%' ORDER BY name"
+            )
+            table_names = [row[0] for row in cursor.fetchall()][:max_tables]
+            tables = []
+            for table in table_names:
+                cursor.execute(f'PRAGMA table_info("{table}")')
+                columns = [row[1] for row in cursor.fetchall()][:max_columns]
+                tables.append({"name": table, "columns": columns})
+            return {"tables": tables}
+
+        # postgresql / mysql via information_schema.
+        schema_filter = "table_schema = 'public'" if db_type == "postgresql" else "table_schema = DATABASE()"
+        cursor.execute(
+            "SELECT table_name, column_name FROM information_schema.columns "
+            f"WHERE {schema_filter} ORDER BY table_name, ordinal_position"
+        )
+        grouped: dict[str, list[str]] = {}
+        for table_name, column_name in cursor.fetchall():
+            cols = grouped.setdefault(table_name, [])
+            if len(cols) < max_columns:
+                cols.append(column_name)
+        tables = [{"name": name, "columns": cols} for name, cols in list(grouped.items())[:max_tables]]
+        return {"tables": tables}
+
     def _check_connectivity(self, name: str, meta: dict) -> bool:
         """Run a lightweight `SELECT 1` against the connector with a short timeout."""
         try:

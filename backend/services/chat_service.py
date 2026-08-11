@@ -80,10 +80,22 @@ class ChatService:
         connected = [c["name"] for c in connectors if c.get("status") == "connected"]
         if connected:
             tools.append(build_database_query_tool(db_service, activity_sink=db_activity))
-            db_block = (
-                "Available database connectors (use the database_query tool with a "
-                f"read-only SELECT and one of these connector names): {', '.join(connected)}."
+            db_lines = [
+                "Available database connectors for the database_query tool (read-only SELECT/WITH queries only):"
+            ]
+            for name in connected:
+                schema = db_service.get_schema(name)
+                schema_tables = schema.get("tables", [])
+                if schema_tables:
+                    table_desc = "; ".join(f"{t['name']}({', '.join(t['columns'])})" for t in schema_tables)
+                    db_lines.append(f"- {name}: {table_desc}")
+                else:
+                    db_lines.append(f"- {name}")
+            db_lines.append(
+                "Use the exact table and column names shown above, and quote text "
+                "values with single quotes (e.g. WHERE country = 'France')."
             )
+            db_block = "\n".join(db_lines)
             widget_context_block = f"{widget_context_block}\n\n{db_block}" if widget_context_block else db_block
 
         return build_agent(

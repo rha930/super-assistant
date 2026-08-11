@@ -292,6 +292,8 @@ def build_place_pin_tool(artifact_store: list):
 
         Use this when the user asks to mark, pin, save, or annotate a
         location on the map. The pin will appear in the Map panel immediately.
+        To mark several locations, call this tool once per location; all pins
+        placed in a single turn are rendered together on the map.
 
         place: place name ("Eiffel Tower") or "lat, lng" coordinate string.
         label: optional pin label. Defaults to the resolved place name.
